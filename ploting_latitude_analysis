@@ -1,0 +1,732 @@
+library(raster)
+library(xts)
+library(lubridate)
+library(ggstatsplot)
+library(rsq)
+library(extrafont)
+library(car)
+library(bfast)
+library(remotes)
+library(ggpmisc)
+library(dplyr)
+library(lubridate)
+library(mice)
+library(VIM)
+setwd("F:\\Global_water_sink_source\\K-P\\Beck_KG_V1")
+climate_zone <- raster("Beck_KG_V1_present_0p083.tif")
+
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+multiband_tif <- stack("coeff_model1_ridge.tif")
+
+##############
+multi_frame <-
+  as.data.frame(multiband_tif, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+multi_frame$climate = extract(climate_zone ,multi_frame[,1:2])
+
+ApplyQuintiles <- function(x) {
+  cut(x, breaks=c(1,3,7,16,28), 
+      labels=c("E","A","T","S"), include.lowest=TRUE)
+}
+multi_frame$Zone <- sapply(multi_frame$climate, ApplyQuintiles)
+
+multi_frame_1 <- na.omit(multi_frame)
+
+multi_long = multi_frame_1 %>% reshape2::melt(id=c("x", "y","Zone","climate"))
+
+
+
+statis_plot = multi_long %>% dplyr::filter(variable %in% c("pr_EI","gimms_ndvi_EI","srad_EI","vpd_EI","tmean_EI")) %>%
+  group_by(Zone,variable) %>%
+  summarise(median = mean(value, na.rm = TRUE),
+            Q75 = quantile(value,probs=0.75, na.rm = TRUE),
+            Q25 = quantile(value,probs=0.25, na.rm = TRUE),
+            Q90 = quantile(value,probs=0.9, na.rm = TRUE),
+            Q10 = quantile(value,probs=0.1, na.rm = TRUE))
+
+
+# statis_plot_long = statis_plot %>% reshape2::melt(id=c("Zone","variable"))
+
+ggplot(statis_plot, aes(x=variable, y=median,group = Zone,color = Zone))+ 
+  geom_errorbar(aes(ymin=Q25, ymax=Q75,color = Zone), width=.2,size=1, 
+                position=position_dodge(0.3))+scale_color_manual(values=c("#FF8989","#FF9547","#7CBB9C","#4490C4"))+
+  geom_point(aes(color=Zone),position=position_dodge(0.3),size=3)+
+labs(x="Climate Zone", y = "Sensitivity") +scale_y_continuous(breaks = seq(-1,0.4,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+####################################################################################attitude analysis 
+library(raster)
+library(xts)
+library(lubridate)
+library(ggstatsplot)
+library(rsq)
+library(extrafont)
+library(car)
+library(bfast)
+library(remotes)
+library(ggpmisc)
+library(dplyr)
+library(lubridate)
+library(mice)
+library(VIM)
+
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+multiband_tif <- stack("coeff_model1_ridge.tif")
+
+##############
+multi_frame <-
+  as.data.frame(multiband_tif, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 0))
+
+multi_long = multi_frame %>% reshape2::melt(id=c("x", "y"))
+
+statis_plot = multi_long %>% dplyr::filter(variable %in% c("pr_EI","gimms_ndvi_EI","srad_EI","vpd_EI","tmean_EI")) %>%
+  group_by(y,variable) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            Q75 = quantile(value,probs=0.75, na.rm = TRUE),
+            Q25 = quantile(value,probs=0.25, na.rm = TRUE) )
+
+
+ggplot(statis_plot %>% dplyr::filter(variable %in% c("pr_EI")), aes(x=y, y=median))+ 
+  geom_ribbon(aes(ymin=Q25, ymax=Q75),alpha=0.3)+
+coord_flip()+geom_line(size = 0.8)+
+  labs(x="Lontitude", y = "Sensitivity") +scale_y_continuous(breaks = seq(-1,1,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+
+ggplot(statis_plot %>% dplyr::filter(variable %in% c("gimms_ndvi_EI")), aes(x=y, y=median))+ 
+  geom_ribbon(aes(ymin=Q25, ymax=Q75),alpha=0.3)+
+  coord_flip()+geom_line(size = 0.8)+
+  labs(x=" ", y = "gimms_ndvi_EI ") +scale_y_continuous(breaks = seq(-1,1,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+
+ggplot(statis_plot %>% dplyr::filter(variable %in% c("srad_EI")), aes(x=y, y=median))+ 
+  geom_ribbon(aes(ymin=Q25, ymax=Q75),alpha=0.3)+
+  coord_flip()+geom_line(size = 0.8)+
+  labs(x=" ", y = "srad_EI") +scale_y_continuous(breaks = seq(-1,1,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+ggplot(statis_plot %>% dplyr::filter(variable %in% c("vpd_EI")), aes(x=y, y=median))+ 
+  geom_ribbon(aes(ymin=Q25, ymax=Q75),alpha=0.3)+
+  coord_flip()+geom_line(size = 0.8)+
+  labs(x=" ", y = "vpd_EI") +scale_y_continuous(breaks = seq(-1,1,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+ggplot(statis_plot %>% dplyr::filter(variable %in% c("tmean_EI")), aes(x=y, y=median))+ 
+  geom_ribbon(aes(ymin=Q25, ymax=Q75),alpha=0.3)+
+  coord_flip()+geom_line(size = 0.8)+
+  labs(x=" ", y = "tmean_EI") +scale_y_continuous(breaks = seq(-1,1,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+# statis_plot = multi_long %>% dplyr::filter(variable %in% c("pr_EI","gimms_ndvi_EI","srad_EI","vpd_EI","tmean_EI")) %>%
+#   group_by(variable) %>%
+#   summarise(median = median(value, na.rm = TRUE),
+#             Q75 = quantile(value,probs=0.75, na.rm = TRUE),
+#             Q25 = quantile(value,probs=0.25, na.rm = TRUE) )
+# 
+# ggplot(multi_long %>% dplyr::filter(variable %in% c("pr_EI","gimms_ndvi_EI","srad_EI","vpd_EI","tmean_EI")), aes(y=value))+ 
+#   geom_density()+ facet_grid(rows =  vars(variable),scales = "free")+ labs(x="Density ", y = "Sensitivity") +ylim(-0.1,0.1)+
+#   theme(axis.title=element_text(size=20,face="bold",color="black"),
+#         axis.text = element_text(size=18,face="plain",color="black"),
+#         panel.background=element_rect(colour="black",fill=NA),
+#         panel.grid.minor=element_blank(),
+#         text=element_text(size=18),
+#         legend.position="bottom",
+#         legend.text = element_text(size=18
+#         ),legend.background=element_rect(colour=NA,fill=NA),
+#         axis.ticks=element_line(colour="black"))
+  
+####################################################################################attitude analysis 
+library(raster)
+library(xts)
+library(lubridate)
+library(ggstatsplot)
+library(rsq)
+library(extrafont)
+library(car)
+library(bfast)
+library(remotes)
+library(ggpmisc)
+library(dplyr)
+library(lubridate)
+library(mice)
+library(VIM)
+
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+multiband_tif <- stack("coeff_model1_ridge.tif")
+
+##############
+multi_frame <-
+  as.data.frame(multiband_tif, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 0))
+
+multi_long = multi_frame %>% reshape2::melt(id=c("x", "y"))
+
+statis_plot = multi_long %>% dplyr::filter(variable %in% c("pr_EI","gimms_ndvi_EI","srad_EI","vpd_EI","tmean_EI")) %>%
+  group_by(y,variable) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            Q75 = quantile(value,probs=0.75, na.rm = TRUE),
+            Q25 = quantile(value,probs=0.25, na.rm = TRUE) )
+
+
+ggplot(statis_plot %>% dplyr::filter(variable %in% c("pr_EI")), aes(x=y, y=median))+ 
+  geom_ribbon(aes(ymin=Q25, ymax=Q75),alpha=0.3)+
+  coord_flip()+geom_line(size = 0.8)+
+  labs(x="Lontitude", y = "Sensitivity") +scale_y_continuous(breaks = seq(-1,1,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+
+ggplot(statis_plot %>% dplyr::filter(variable %in% c("gimms_ndvi_EI")), aes(x=y, y=median))+ 
+  geom_ribbon(aes(ymin=Q25, ymax=Q75),alpha=0.3)+
+  coord_flip()+geom_line(size = 0.8)+
+  labs(x=" ", y = "gimms_ndvi_EI ") +scale_y_continuous(breaks = seq(-1,1,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+
+ggplot(statis_plot %>% dplyr::filter(variable %in% c("srad_EI")), aes(x=y, y=median))+ 
+  geom_ribbon(aes(ymin=Q25, ymax=Q75),alpha=0.3)+
+  coord_flip()+geom_line(size = 0.8)+
+  labs(x=" ", y = "srad_EI") +scale_y_continuous(breaks = seq(-1,1,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+ggplot(statis_plot %>% dplyr::filter(variable %in% c("vpd_EI")), aes(x=y, y=median))+ 
+  geom_ribbon(aes(ymin=Q25, ymax=Q75),alpha=0.3)+
+  coord_flip()+geom_line(size = 0.8)+
+  labs(x=" ", y = "vpd_EI") +scale_y_continuous(breaks = seq(-1,1,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+ggplot(statis_plot %>% dplyr::filter(variable %in% c("tmean_EI")), aes(x=y, y=median))+ 
+  geom_ribbon(aes(ymin=Q25, ymax=Q75),alpha=0.3)+
+  coord_flip()+geom_line(size = 0.8)+
+  labs(x=" ", y = "tmean_EI") +scale_y_continuous(breaks = seq(-1,1,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+#####################################################################sensitivity difference
+
+library(raster)
+library(xts)
+library(lubridate)
+library(ggstatsplot)
+library(rsq)
+library(extrafont)
+library(car)
+library(bfast)
+library(remotes)
+library(ggpmisc)
+library(dplyr)
+library(lubridate)
+library(mice)
+library(VIM)
+
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+sensi_1982 <- raster("coeff_model1_kndvi_EI.tif")
+sensi_2000 <- raster("coeff_model2_kndvi_EI.tif")
+sensi_total <- stack("coeff_model1_ridge.tif")
+
+##############
+multi_frame <-
+  as.data.frame(sensi_total$gimms_ndvi_EI, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+multi_frame$snesi_1982 = extract(sensi_1982 ,multi_frame[,1:2])
+multi_frame$snesi_2000 = extract(sensi_2000 ,multi_frame[,1:2])
+
+multi_frame = multi_frame %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 0))
+
+multi_long = multi_frame %>% reshape2::melt(id=c("x", "y"))
+
+statis_plot = multi_long %>% 
+  group_by(y,variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE) )
+
+
+ggplot(statis_plot, aes(x=y, y=mean,group = variable,color = variable))+ 
+geom_line(size = 0.8)+
+  labs(x="Lontitude", y = "Sensitivity") +scale_y_continuous(breaks = seq(-1,1,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="none",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+
+
+###########################################################################trend analysis
+library(raster)
+library(xts)
+library(lubridate)
+library(ggstatsplot)
+library(rsq)
+library(extrafont)
+library(car)
+library(bfast)
+library(remotes)
+library(ggpmisc)
+library(dplyr)
+library(lubridate)
+library(mice)
+library(VIM)
+
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+all_trend <- stack("all_trend.tif")
+all_trend_p <- stack("all_trend_p.tif")
+
+names(all_trend_p) = c("EI_P","NDVI_P","VPD_P","RS_P","T_P","Pre_P")
+
+
+multi_frame_origin <-
+  as.data.frame(all_trend, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+multi_frame_origin$EI_P = extract(all_trend_p$EI_P ,multi_frame_origin[,1:2])
+multi_frame_origin$NDVI_P = extract(all_trend_p$NDVI_P ,multi_frame_origin[,1:2])
+################################without p
+multi_frame = multi_frame_origin %>% 
+  na.omit() %>% mutate(across(c(x, y), round, digits = 0)) 
+
+
+multi_long = multi_frame %>% reshape2::melt(id=c("x", "y"))
+
+statis_plot = multi_long %>% dplyr::filter(variable %in% c("year_gimms_ndvi")) %>%
+  group_by(y,variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE) )
+###########################with p 
+multi_frame_1 = multi_frame_origin %>% dplyr::filter(multi_frame_origin$NDVI_P < 0.05) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 0))
+
+multi_long_1 = multi_frame_1 %>% reshape2::melt(id=c("x", "y"))
+
+statis_plot_p = multi_long_1 %>% dplyr::filter(variable %in% c("year_gimms_ndvi")) %>%
+  group_by(y,variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE) )
+
+
+##############################to merge
+statis_plot_p = transform(statis_plot_p, ID = "P")
+statis_plot = transform(statis_plot, ID = "NOP")
+statis_plot_all = rbind(statis_plot_p,statis_plot)
+
+
+ggplot(statis_plot_all, aes(x=y, y=mean,group = ID, color = ID))+ 
+  geom_line(size = 0.6)+ geom_hline(yintercept=0, linetype="dashed", color = "black")+ scale_color_manual(values=c( "#268785","#66BAB7")) +
+  labs(x="Lontitude", y = "Sensitivity") +scale_x_continuous(limits = c(-50,70),breaks = seq(-50,70,30))+
+  scale_y_continuous(limits = c(-5,7.5),breaks = seq(-5,5,5))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="none",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+###########################################################################trend analysis
+library(raster)
+library(xts)
+library(lubridate)
+library(ggstatsplot)
+library(rsq)
+library(extrafont)
+library(car)
+library(bfast)
+library(remotes)
+library(ggpmisc)
+library(dplyr)
+library(lubridate)
+library(mice)
+library(VIM)
+
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+all_trend <- stack("all_trend.tif")
+all_trend_p <- stack("all_trend_p.tif")
+
+names(all_trend_p) = c("EI_P","NDVI_P","VPD_P","RS_P","T_P","Pre_P")
+
+
+multi_frame_origin <-
+  as.data.frame(all_trend, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+multi_frame_origin$EI_P = extract(all_trend_p$EI_P ,multi_frame_origin[,1:2])
+multi_frame_origin$NDVI_P = extract(all_trend_p$NDVI_P ,multi_frame_origin[,1:2])
+################################without p
+multi_frame = multi_frame_origin %>% 
+  na.omit() %>% mutate(across(c(x, y), round, digits = 0)) 
+
+
+multi_long = multi_frame %>% reshape2::melt(id=c("x", "y"))
+
+statis_plot = multi_long %>% dplyr::filter(variable %in% c("year_EI")) %>%
+  group_by(y,variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE) )
+###########################with p 
+multi_frame_1 = multi_frame_origin %>% dplyr::filter(multi_frame_origin$EI_P < 0.05) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 0))
+
+multi_long_1 = multi_frame_1 %>% reshape2::melt(id=c("x", "y"))
+
+statis_plot_p = multi_long_1 %>% dplyr::filter(variable %in% c("year_EI")) %>%
+  group_by(y,variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE) )
+
+
+##############################to merge
+statis_plot_p = transform(statis_plot_p, ID = "P")
+statis_plot = transform(statis_plot, ID = "NOP")
+statis_plot_all = rbind(statis_plot_p,statis_plot)
+
+
+ggplot(statis_plot_all, aes(x=y, y=mean,group = ID, color = ID))+ 
+  geom_line(size = 0.6)+ geom_hline(yintercept=0, linetype="dashed", color = "black")+ scale_color_manual(values=c( "#268785","#66BAB7")) +
+  labs(x="Lontitude", y = "Sensitivity") +scale_x_continuous(limits = c(-50,70),breaks = seq(-50,70,30))+
+  scale_y_continuous(limits = c(-7.5,6),breaks = seq(-5,5,5))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="none",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+###########################################################################trend analysis figure3
+library(raster)
+library(xts)
+library(lubridate)
+library(ggstatsplot)
+library(rsq)
+library(extrafont)
+library(car)
+library(bfast)
+library(remotes)
+library(ggpmisc)
+library(dplyr)
+library(lubridate)
+library(mice)
+library(VIM)
+
+setwd("F:\\Global_water_sink_source\\Figures\\trend")
+all_trend <- stack("class.tif")
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+all_trend_p <- stack("all_trend_p.tif")
+
+names(all_trend_p) = c("EI_P","NDVI_P","VPD_P","RS_P","T_P","Pre_P")
+
+multi_frame_origin <-
+  as.data.frame(all_trend, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+
+multi_frame_origin$EI_P = extract(all_trend_p$EI_P ,multi_frame_origin[,1:2])
+multi_frame_origin$NDVI_P = extract(all_trend_p$NDVI_P ,multi_frame_origin[,1:2])
+###########################NN,PP,NP,PN
+
+statis_plot_p = multi_frame_origin  %>%  transform(ID = 1)%>% dplyr::filter(multi_frame_origin$class > 0 & multi_frame_origin$NDVI_P <0.05 & multi_frame_origin$EI_P < 0.05) %>%
+  mutate(across(c(x, y), round, digits = 0)) %>%
+  group_by(y,class) %>%
+  summarise(sum = sum(ID, na.rm = TRUE) )
+
+statis_plot = multi_frame_origin  %>%  transform(ID = 1)%>% dplyr::filter(multi_frame_origin$class > 0 ) %>%
+  mutate(across(c(x, y), round, digits = 0)) %>%
+  group_by(y,class) %>%
+  summarise(sum2 = sum(ID, na.rm = TRUE) )
+
+all =merge(statis_plot_p,statis_plot)
+all$ratio = all$sum/all$sum2
+
+ggplot(all, aes(x=y, y=sum,group = as.factor(class), color = as.factor(class)))+ 
+  geom_line(size = 0.6)+ geom_hline(yintercept=0, linetype="dashed", color = "black")+scale_color_manual(values=c( "#FD9B21","#827799","#FCCE94","#5D3B99")) +
+  labs(x="Lontitude", y = "Sensitivity")+xlim(-50,70)+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="none",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+###################################################################################ratio of vegetation and climate 
+setwd("F:\\Global_water_sink_source\\Figures\\trend")
+class <- stack("class.tif")
+
+setwd("F:\\Global_water_sink_source\\Data\\ratio_scale_10000")
+all_trend <- stack("diff_vege_climate.tif")
+
+setwd("F:\\Global_water_sink_source\\ecological")
+lulc <- stack("LULC.tif")
+
+multi_frame <-
+  as.data.frame(class, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+multi_frame$ratio = extract(all_trend ,multi_frame[,1:2])
+
+multi_frame$lulc = extract(lulc ,multi_frame[,1:2])
+
+multi_frame$class = as.factor(multi_frame$class)
+multi_frame$lulc = as.factor(multi_frame$lulc)
+
+multi_long = multi_frame %>% reshape2::melt(id=c("x", "y"))
+
+statis_plot = multi_frame %>% na.omit() %>%
+  group_by(class,lulc) %>%
+  summarise(median = median(ratio, na.rm = TRUE),
+            Q75 = quantile(ratio,probs=0.75, na.rm = TRUE),
+            Q25 = quantile(ratio,probs=0.25, na.rm = TRUE) )
+
+
+ggplot(statis_plot, aes(x=y, y=median))+ 
+  geom_ribbon(aes(ymin=Q25, ymax=Q75),alpha=0.3)+
+  coord_flip()+geom_line(size = 0.8)+geom_hline(yintercept=0, linetype="dashed", color = "black")+
+  labs(x="Lontitude", y = "Sensitivity") +scale_y_continuous(breaks = seq(-1,1,0.2))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+###############################################################################################################
+setwd("F:\\Global_water_sink_source\\Data\\regions_danger")
+bar_plot <- read.table("Figure1.csv",header=T, na.strings = "NA", sep=",") %>% dplyr::filter(Type %in% c("Land","Land-Ocean")) %>% 
+  dplyr::select(Acronym,PP,PN,NN,NP) %>%
+  reshape2::melt() %>% na.omit() 
+  
+  
+  bar_plot = bar_plot %>% dplyr::filter(variable %in% "PP") %>%
+  arrange(desc(value)) %>%
+  bind_rows(bar_plot %>% filter(variable != 'PP')) %>%
+  mutate(Acronym = factor(Acronym, unique(Acronym)), 
+         value = value * 100, 
+         label = paste0(value, '%'))
+
+ggplot(bar_plot, aes(fill=variable, y=value, x=Acronym,label = label)) + 
+  geom_bar(position="stack", stat="identity")+ labs(x="Subregions", y = "Percentage of total")+
+  coord_flip()+scale_fill_manual(values=c( "#FD9B21","#827799","#FCCE94","#5D3B99"))+
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=12,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=12),
+        legend.position="bottom",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+####################################################################################################################
+setwd("F:\\Global_water_sink_source\\Figures\\trend")
+class <- stack("class.tif")
+
+setwd("F:\\Global_water_sink_source\\Data\\ratio_scale_10000")
+all_trend <- stack("trend_ndvi_EI.tif")
+
+setwd("F:\\Global_water_sink_source\\shp")
+zone <- stack("IPCCWGIreferenceregionsv4_Po31.tif")
+
+multi_frame <-
+  as.data.frame(class, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+multi_frame$ratio = extract(all_trend ,multi_frame[,1:2])
+
+multi_frame$zone = extract(zone ,multi_frame[,1:2]) 
+
+multi_frame$class = as.factor(multi_frame$class)
+multi_frame$zone = as.factor(multi_frame$zone)
+
+multi_long = multi_frame %>% na.omit() 
+
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+
+statis_plot = multi_long %>% 
+  group_by(zone) %>%
+  summarise(median = median(ratio, na.rm = TRUE),
+            Q75 = quantile(ratio,probs=0.75, na.rm = TRUE),
+            Q25 = quantile(ratio,probs=0.25, na.rm = TRUE) )
+
+
+###
+setwd("F:\\Global_water_sink_source\\Data\\regions_danger")
+ID <- read.table("UID.csv",header=T, na.strings = "NA", sep=",") 
+ID$zone = as.factor(ID$zone)
+all = merge(ID,statis_plot) %>% dplyr::filter(class %in% "1") 
+all =merge(all,bar_plot %>% dplyr::filter(variable %in% "PP"))
+
+all$climate = all$mean*all$value
+all$vege = (1 - all$mean)*all$value 
+
+all_plot = all %>% arrange(desc(value)) %>% dplyr::select(Acronym,climate,vege,label) %>% reshape2::melt(variable.name = "Acronym")
+colnames(all_plot) = c("Acronym","label","variable","value")
+
+ggplot(data=all_plot, aes(x=Acronym, y=value, fill=variable)) +
+  geom_bar(stat="identity")
+
+
+ggplot(all_plot, aes(fill=variable, y=value, x=Acronym,label = label)) + 
+  geom_bar(position="stack", stat="identity")+ labs(x="Subregions", y = "Percentage of total")+
+  coord_flip()+scale_fill_manual(values=c( "#FD9B21","#827799","#FCCE94","#5D3B99"))+
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=12,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=12),
+        legend.position="bottom",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+#####
+setwd("F:\\Global_water_sink_source\\Data\\regions_danger")
+ID <- read.table("UID.csv",header=T, na.strings = "NA", sep=",") 
+
+all = merge(ID,statis_plot) 
+
+
+all_plot = all %>%  dplyr::select(Acronym,mean) %>% reshape2::melt()
+
+all_plot = all_plot %>% dplyr::filter(variable %in% "vege") %>%
+  arrange(desc(value)) %>%
+  bind_rows(all_plot %>% filter(variable != 'vege')) %>%
+  mutate(Acronym = factor(Acronym, unique(Acronym)), 
+         value = value * 100, 
+         label = paste0(value, '%'))
+
+ggplot(all_plot, aes(fill=variable, y=value, x=Acronym,label = label)) + 
+  geom_bar(position="stack", stat="identity")+ labs(x="Subregions", y = "Percentage of total")+
+  coord_flip()+
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=12,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=12),
+        legend.position="bottom",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+######################
+setwd("F:\\Global_water_sink_source\\Data\\regions_danger")
+ID <- read.table("UID.csv",header=T, na.strings = "NA", sep=",") 
+
+all = merge(ID,statis_plot) 
+
+all_plot = all %>% 
+  arrange(desc(median)) %>%
+  mutate(Acronym = factor(Acronym, unique(Acronym)), 
+         median = median, 
+         label = paste0(median, '%'))
+
+
+ggplot(all_plot, aes(x=Acronym, y=median,label = label))+ 
+  geom_errorbar(aes(ymin=Q25, ymax=Q75))+geom_point(position=position_dodge(0.3),size=1)+
+  coord_flip()+geom_line(size = 0.8)+geom_hline(yintercept=0, linetype="dashed", color = "red")+
+  labs(x="Subregions ", y = "Trend KNDVI") +scale_y_continuous(limits= c(-2.5,2.5),breaks = seq(-2.5,2.5,0.5))+
+  theme(axis.title=element_text(size=13,face="bold",color="black"),
+        axis.text = element_text(size=13,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=13),
+        legend.position="bottom",
+        legend.text = element_text(size=13
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+
