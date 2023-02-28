@@ -1,0 +1,151 @@
+library(raster)
+library(xts)
+library(lubridate)
+library(ggstatsplot)
+library(rsq)
+library(extrafont)
+library(car)
+library(bfast)
+library(remotes)
+library(ggpmisc)
+library(dplyr)
+library(lubridate)
+library(mice)
+library(VIM)
+
+setwd("F:\\Global_water_sink_source\\Figures\\A_B")
+multiband_tif <- stack("diff_indirect_direct_ratio.tif")
+
+##############
+multi_frame <-
+  as.data.frame(multiband_tif, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 0))
+
+multi_long = multi_frame %>% reshape2::melt(id=c("x", "y"))
+
+statis_plot = multi_long %>% 
+  group_by(y,variable) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            Q75 = quantile(value,probs=0.75, na.rm = TRUE),
+            Q25 = quantile(value,probs=0.25, na.rm = TRUE) )
+
+
+ggplot(statis_plot, aes(x=y, y=median))+ 
+  geom_ribbon(aes(ymin=Q25, ymax=Q75),alpha=0.3)+
+  coord_flip()+geom_line(size = 0.8)+geom_hline(yintercept=0, linetype="dashed", color = "black")+
+  labs(x="Lontitude", y = "Sensitivity") +scale_y_continuous(breaks = seq(-0.8,0.8,0.4))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+#########################################################################################compare the sensitivity and the trend due to KNDVI change from 1982~2000
+#first for the sensitivity
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+sensi_1982 <- stack("coeff_model1_kndvi_EI.tif")
+sensi_2000 <- stack("coeff_model2_kndvi_EI.tif")
+
+##############
+multi_frame <-
+  as.data.frame(sensi_1982 , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+multi_frame$sensi2000= extract(sensi_2000 ,multi_frame[,1:2])
+colnames(multi_frame) = c("x","y","sensi1982","sensi2000")
+multi_long = multi_frame %>%mutate(across(c(x, y), round, digits = 0))  %>% reshape2::melt(id=c("x", "y"))
+
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            Q75 = quantile(value,probs=0.75, na.rm = TRUE),
+            Q25 = quantile(value,probs=0.25, na.rm = TRUE) )
+
+
+ggplot(statis_plot, aes(x=y, y=median,color = variable))+ 
+geom_line(size = 0.8)+geom_hline(yintercept=0, linetype="dashed", color = "black")+
+  labs(x="Lontitude", y = "Sensitivity") +scale_y_continuous(breaks = seq(-0.8,0.8,0.1))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+
+#first for the trend change
+setwd("F:\\Global_water_sink_source\\Data\\ratio_change_value")
+sensi_1982 <- stack("trend_ndvi_EI_1982_2000.tif")
+sensi_2000 <- stack("trend_ndvi_EI_2001_2019.tif")
+
+##############
+multi_frame <-
+  as.data.frame(sensi_1982 , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+multi_frame$sensi2000= extract(sensi_2000 ,multi_frame[,1:2])
+colnames(multi_frame) = c("x","y","sensi1982","sensi2000")
+multi_long = multi_frame %>%mutate(across(c(x, y), round, digits = 0))  %>% reshape2::melt(id=c("x", "y"))
+
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            Q75 = quantile(value,probs=0.75, na.rm = TRUE),
+            Q25 = quantile(value,probs=0.25, na.rm = TRUE) )
+
+
+ggplot(statis_plot, aes(x=y, y=median,color = variable))+ 
+  geom_line(size = 0.8)+geom_hline(yintercept=0, linetype="dashed", color = "black")+
+  labs(x="Lontitude", y = "Sensitivity") +scale_y_continuous(breaks = seq(-2,2,0.5))+scale_x_continuous(breaks = seq(-2,2,0.5))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="bottom",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+###################################################################################################
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+sensi_1982 <- stack("trend_gimms_ndvi_1982_2000.tif")
+sensi_2000 <- stack("trend_gimms_ndvi_2000_2019.tif")
+
+##############
+multi_frame <-
+  as.data.frame(sensi_1982 , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+multi_frame$sensi2000= extract(sensi_2000 ,multi_frame[,1:2])
+colnames(multi_frame) = c("x","y","sensi1982","sensi2000")
+multi_long = multi_frame %>%mutate(across(c(x, y), round, digits = 0))  %>% reshape2::melt(id=c("x", "y"))
+
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            Q75 = quantile(value,probs=0.75, na.rm = TRUE),
+            Q25 = quantile(value,probs=0.25, na.rm = TRUE) )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
