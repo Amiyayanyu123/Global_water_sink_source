@@ -1,0 +1,223 @@
+library(raster)
+library(xts)
+library(lubridate)
+library(ggstatsplot)
+library(rsq)
+library(extrafont)
+library(car)
+library(bfast)
+library(remotes)
+library(ggpmisc)
+library(dplyr)
+library(lubridate)
+library(mice)
+library(VIM)
+
+setwd("F:\\Global_water_consumption\\Data\\period_total")
+
+sensi <- stack("coeff_model1_ridge.tif") 
+
+multi_frame <-
+  as.data.frame(sensi , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+
+multi_long = multi_frame %>% dplyr::select(pr_EI, tmean_EI, vpd_EI, srad_EI, gimms_ndvi_EI) %>% reshape2::melt()
+
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+
+
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            mean = mean(value, na.rm = TRUE),
+            Q25 = quantile(value,probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(value,probs = 0.75, na.rm = TRUE),
+            se = se(value,na.rm = T)) 
+
+ggplot(data = statis_plot,aes(x= variable, y=mean))+ 
+  geom_bar(position="stack", stat="identity",color = "grey",fill = NA,size = 1)+
+  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75), width=0,size=1,color = "grey", 
+                position=position_dodge(0.3))+
+  geom_point(data = statis_plot,aes(x= variable, y= median),position=position_dodge(0.3),size=4,color = "grey")+
+  labs(x="Variable", y = "Sensitivity") +geom_text(aes(label = round(mean,digits = 2)),size = 5,hjust = 0.5, nudge_x = 0.2)+
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="none",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+######################################################################################################
+setwd("F:\\Global_water_consumption\\Data\\period_total")
+
+sensi <- stack("all_trend.tif") 
+
+multi_frame <-
+  as.data.frame(sensi , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+
+multi_long = multi_frame %>% dplyr::select(trend_kndvi, trend_EI, trend_rs, trend_tmean, trend_pr, trend_vpd) %>% reshape2::melt()
+
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+
+
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(median = median(value, na.rm = TRUE)*10,
+            mean = mean(value, na.rm = TRUE)*10,
+            Q25 = quantile(value,probs = 0.25, na.rm = TRUE)*10,
+            Q75 = quantile(value,probs = 0.75, na.rm = TRUE)*10,
+            se = se(value,na.rm = T)*10) 
+
+ggplot(data = statis_plot,aes(x= variable, y=mean))+ 
+  geom_bar(position="stack", stat="identity",color = "grey",fill = NA,size = 1)+
+  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75), width=0,size=1,color = "grey", 
+                position=position_dodge(0.3))+
+  geom_point(data = statis_plot,aes(x= variable, y= median),position=position_dodge(0.3),size=4,color = "grey")+
+  labs(x="Variable", y = "Trend") +geom_text(aes(label = round(mean,digits = 3)),size = 5,hjust = 0.5, nudge_x = 0.2)+
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="none",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+######################################################################################################
+setwd("F:\\Global_water_consumption\\Data\\period_total")
+
+sensi <- stack("trend_var_EI.tif") 
+
+multi_frame <-
+  as.data.frame(sensi , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+
+multi_long = multi_frame %>% dplyr::select(trend_kndvi, trend_pr, trend_tmean, trend_vpd, trend_rs) %>% reshape2::melt()
+
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+
+
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(median = median(value, na.rm = TRUE)*10,
+            mean = mean(value, na.rm = TRUE)*10,
+            Q25 = quantile(value,probs = 0.25, na.rm = TRUE)*10,
+            Q75 = quantile(value,probs = 0.75, na.rm = TRUE)*10,
+            se = se(value,na.rm = T)*10) 
+
+ggplot(data = statis_plot,aes(x= variable, y=mean))+ 
+  geom_bar(position="stack", stat="identity",color = "grey",fill = NA,size = 1)+
+  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75), width=0,size=1,color = "grey", 
+                position=position_dodge(0.3))+
+  geom_point(data = statis_plot,aes(x= variable, y= median),position=position_dodge(0.3),size=4,color = "grey")+
+  labs(x="Variable", y = "Trend_by_variable") +geom_text(aes(label = round(mean,digits = 3)),size = 5,hjust = 0.5, nudge_x = 0.2)+
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="none",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+######################################################################################################
+setwd("F:\\Global_water_consumption\\Data\\period_total")
+
+cli <- stack("trend_var_climate.tif")
+vege <- stack("trend_ndvi_EI.tif")
+
+multi_frame <-
+  as.data.frame(cli , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+multi_frame$vege = extract(vege ,multi_frame[,1:2])
+multi_frame$cli =  multi_frame$trend_pr
+
+multi_long = multi_frame %>% dplyr::select(cli,vege) %>% reshape2::melt()
+
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+
+
+statis_plot = multi_long %>%
+  group_by(variable) %>%
+  summarise(median = median(value, na.rm = TRUE)*10,
+            mean = mean(value, na.rm = TRUE)*10,
+            Q25 = quantile(value,probs = 0.25, na.rm = TRUE)*10,
+            Q75 = quantile(value,probs = 0.75, na.rm = TRUE)*10,
+            se = se(value,na.rm = T)*10)
+
+ggplot(data = statis_plot,aes(x= variable, y=mean,fill = variable))+ 
+  geom_bar(position="stack", stat="identity",color = "grey",size = 1)+
+  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75), width=0,size=1,color = "grey", 
+                position=position_dodge(0.3))+
+  geom_point(data = statis_plot,aes(x= variable, y= median),position=position_dodge(0.3),size=4,color = "grey")+
+  labs(x="Variable", y = "Trend_by_variable") +geom_text(aes(label = round(mean,digits = 3)),size = 5,hjust = 0.5, nudge_x = 0.2)+
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="none",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+######################################################################################################
+setwd("F:\\Global_water_consumption\\Data\\period_total")
+
+cli <- stack("climate_ratio.tif") 
+vege <- stack("kndvi_ratio.tif") 
+
+multi_frame <-
+  as.data.frame(cli , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+multi_frame$vege = extract(vege ,multi_frame[,1:2])
+multi_frame$cli =  multi_frame$climate_ratio
+
+multi_long = multi_frame %>% dplyr::select(cli,vege) %>% reshape2::melt()
+
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+
+
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(median = median(value, na.rm = TRUE)*100,
+            mean = mean(value, na.rm = TRUE)*100,
+            Q25 = quantile(value,probs = 0.25, na.rm = TRUE)*100,
+            Q75 = quantile(value,probs = 0.75, na.rm = TRUE)*100,
+            se = se(value,na.rm = T)*100) 
+
+ggplot(data = statis_plot,aes(x= variable, y=mean,fill=variable))+ 
+  geom_bar(position="stack", stat="identity",color = "grey",size = 1)+
+  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75), width=0,size=1,color = "grey", 
+                position=position_dodge(0.3))+
+  geom_point(data = statis_plot,aes(x= variable, y= median),position=position_dodge(0.3),size=4,color = "grey")+
+  labs(x="Variable", y = "Contribution") +geom_text(aes(label = round(mean,digits = 0)),size = 5,hjust = 0.5, nudge_x = 0.2)+
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="none",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
