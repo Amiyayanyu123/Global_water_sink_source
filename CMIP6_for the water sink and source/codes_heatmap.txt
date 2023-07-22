@@ -1,0 +1,201 @@
+library(raster)
+library(xts)
+library(lubridate)
+library(ggstatsplot)
+library(rsq)
+library(extrafont)
+library(car)
+library(bfast)
+library(remotes)
+library(ggpmisc)
+library(dplyr)
+library(lubridate)
+library(mice)
+library(VIM)
+
+setwd("F:\\Global_water_sink_source\\Figures\\A_B")
+
+AB <- stack("indirect_ratio_by_sensitivity.tif")
+
+setwd("F:\\Global_water_sink_source\\Data\\ratio_scale_10000")
+
+ratio <- stack("kndvi_ratio.tif")
+
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+
+sensi <- stack("coeff_model1_ridge.tif")
+sensi = sensi$gimms_ndvi_EI
+
+setwd("F:\\Global_water_sink_source\\Figures\\trend")
+ 
+class <- stack("class.tif")
+
+setwd("F:\\Global_water_sink_source\\ecological")
+
+PET <- stack("PET.tif")
+
+Pre <- stack("Pre.tif")
+
+LULC <- stack("LULC.tif")
+
+KNDVI<- stack("KNDVI.tif")
+####################################
+multi_frame <-
+  as.data.frame(AB , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+multi_frame$ratio = extract(ratio ,multi_frame[,1:2])
+multi_frame$sensi = extract(sensi ,multi_frame[,1:2])
+multi_frame$class = extract(class,multi_frame[,1:2])
+multi_frame$Pre = extract(Pre,multi_frame[,1:2])
+multi_frame$PET = extract(PET,multi_frame[,1:2])
+multi_frame$LULC = extract(LULC,multi_frame[,1:2])
+multi_frame$KNDVI = extract(KNDVI,multi_frame[,1:2])
+multi_frame$DI = multi_frame$Pre/multi_frame$PET
+
+
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+
+##############################################
+statis_plot = multi_frame %>% 
+  group_by(class) %>% 
+  summarise(median = median(ratio, na.rm = TRUE),
+            mean = mean(ratio, na.rm = TRUE),
+            Q25 = quantile(ratio,probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(ratio,probs = 0.75, na.rm = TRUE)) 
+
+statis_plot$vege = statis_plot$mean
+statis_plot$cli = 1 - statis_plot$mean
+statis_plot$class =as.character(statis_plot$class)
+
+statis = statis_plot %>% dplyr::select(cli,vege,class) %>% reshape2::melt()
+
+ggplot()+ 
+  geom_bar(data = statis,aes(x= class, y=value,fill = variable), position="stack", stat="identity")+
+  geom_errorbar(data = statis_plot,aes(x= class, y= mean, ymin=Q25, ymax=Q75), width=0,size=1.5,color = "grey", 
+                position=position_dodge(0.3))+
+  geom_point(data = statis_plot,aes(x= class, y= median),position=position_dodge(0.3),size=3.5,color = "grey")+
+  labs(x="Zone", y = "Contribution") +
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="none",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+##############################################
+statis_plot = multi_frame %>% 
+  group_by(class) %>% 
+  summarise(median = median(indirect_ratio_by_sensitivity , na.rm = TRUE),
+            mean = mean(indirect_ratio_by_sensitivity , na.rm = TRUE),
+            Q25 = quantile(indirect_ratio_by_sensitivity ,probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(indirect_ratio_by_sensitivity ,probs = 0.75, na.rm = TRUE)) 
+
+statis_plot$vege = statis_plot$mean
+statis_plot$cli = 1 - statis_plot$mean
+statis_plot$class =as.character(statis_plot$class)
+
+statis = statis_plot %>% dplyr::select(cli,vege,class) %>% reshape2::melt()
+
+ggplot()+ 
+  geom_bar(data = statis,aes(x= class, y=value,fill = variable), position="stack", stat="identity")+
+  geom_errorbar(data = statis_plot,aes(x= class, y= mean, ymin=Q25, ymax=Q75), width=0,size=1.5,color = "grey", 
+                position=position_dodge(0.3))+scale_fill_manual(values=c("#02CAA9", "#DE842A"))+
+  geom_point(data = statis_plot,aes(x= class, y= median),position=position_dodge(0.3),size=3.5,color = "grey")+
+  labs(x="Zone", y = "Contribution") +
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="none",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+##############################################################################
+
+statis_plot = multi_frame %>%  
+  mutate(bin_DI = cut(DI, breaks = c(seq(0,2,by=0.1),Inf))) %>% 
+  group_by(LULC) %>% 
+  summarise(median = median(ratio, na.rm = TRUE),
+            Q25 = quantile(ratio ,probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(ratio ,probs = 0.75, na.rm = TRUE)) %>% filter(LULC <= 8 &  LULC >0 )
+
+
+
+##############################################
+statis_plot = multi_frame %>%  
+  mutate(bin_DI = cut(DI, breaks = c(seq(0,2,by=0.5),Inf))) %>% 
+  mutate(bin_KNDVI = cut(KNDVI, breaks = c(seq(0,1,by=0.2),Inf))) %>%
+  group_by(bin_DI,bin_KNDVI) %>% 
+  summarise(mean = mean(ratio, na.rm = TRUE)) %>% filter( !bin_DI %in% c("(0,0.2]","(2,Inf]") & !bin_KNDVI %in% c("(0,0.1]","(0.7,0.8]") )
+
+
+ggplot(statis_plot, aes(x = bin_KNDVI, y = bin_DI, fill = mean)) + 
+  geom_tile()+
+  scale_fill_distiller(palette = "Spectral",limits = c(0, 0.4)) +labs(x="KNDVI", y = "P/PET") +
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="right",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+##############################################
+statis_plot = multi_frame %>%  
+  mutate(bin_DI = cut(DI, breaks = c(seq(0,2,by=0.5),Inf))) %>% 
+  mutate(bin_KNDVI = cut(KNDVI, breaks = c(seq(0,1,by=0.2),Inf))) %>%
+  group_by(bin_DI) %>% 
+  summarise(mean = median(indirect_ratio_by_sensitivity, na.rm = TRUE)) %>% filter( !bin_DI %in% c("(0,0.2]","(2,Inf]") & !bin_KNDVI %in% c("(0,0.1]","(0.7,0.8]") )
+
+
+ggplot(statis_plot, aes(x = bin_KNDVI, y = bin_DI, fill = mean)) + 
+  geom_tile()+
+  scale_fill_distiller(palette = "Spectral",limits = c(0, 0.7)) +labs(x="KNDVI", y = "P/PET") +
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="right",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+
+# subdata = select(multi_frame, c(3:5)) %>% na.omit()
+# 
+# set.seed(123)
+# 
+# # function to compute total within-cluster sum of square
+# wss <- function(k) {
+#   kmeans(subdata, k, nstart = 10 )$tot.withinss
+# }
+# 
+# # Compute and plot wss for k = 1 to k = 15
+# k.values <- 1:15
+# 
+# # extract wss for 2-15 clusters
+# wss_values <- map_dbl(k.values, wss)
+# 
+# plot(k.values, wss_values,
+#      type="b", pch = 19, frame = FALSE,
+#      xlab="Number of clusters K",
+#      ylab="Total within-clusters sum of squares")
+
+
+
+
+
+
+
+

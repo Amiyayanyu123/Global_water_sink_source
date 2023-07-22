@@ -1,0 +1,226 @@
+library(raster)
+library(lubridate)
+library(lubridate)
+library(tidyverse)
+
+setwd("E:\\water_sink_source_CMIP6\\Datasets\\2015_2100_compare")
+
+sensi1 <- stack("coeff_model1_SSP245.tif") 
+
+multi_frame1 <-
+  as.data.frame(sensi1 , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+
+multi_long1 = multi_frame1 %>% dplyr::select(Pr_EI, Temp_EI, VPD_EI, Rs_EI, LAI_EI) %>% reshape2::melt() %>%
+  transform(Time = "SSP245")
+
+sensi2 <- stack("coeff_model1_SSP585.tif") 
+
+multi_frame2 <-
+  as.data.frame(sensi2, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+
+multi_long2 = multi_frame2 %>% dplyr::select(Pr_EI, Temp_EI, VPD_EI, Rs_EI, LAI_EI) %>% reshape2::melt() %>%
+  transform(Time = "SSP2585")
+
+multi_long = rbind(multi_long1,multi_long2)
+
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+
+
+statis_plot = multi_long %>% 
+  group_by(variable,Time) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            mean = mean(value, na.rm = TRUE),
+            Q25 = quantile(value,probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(value,probs = 0.75, na.rm = TRUE),
+            se = se(value,na.rm = T)) 
+
+ggplot(data = statis_plot,aes(x= variable, y=median,color= Time))+ 
+  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75,color = Time), width=0,size=1, 
+                position=position_dodge(0.8))+scale_color_manual(values=c( "#FFBE7A","#FA7F6F"))+
+  geom_point(data = statis_plot,aes(x= variable, y= median,fill = Time),position=position_dodge(0.8),size=4)+
+  labs(x="Variable", y = "Sensitivity") +
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="none",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))+ facet_wrap(~ variable, ncol=5,scales = "free")
+###########################################################################################
+sensi1 <- stack("all_trend_SSP245.tif") 
+
+multi_frame1 <-
+  as.data.frame(sensi1 , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+
+multi_long1 = multi_frame1 %>% dplyr::select(trend_lai, trend_EI, trend_rs, trend_tmean, trend_pr, trend_vpd ) %>% reshape2::melt() %>%
+  transform(Time = "SSP245")
+
+sensi2 <- stack("all_trend_SSP585.tif") 
+
+multi_frame2 <-
+  as.data.frame(sensi2, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+
+multi_long2 = multi_frame2 %>% dplyr::select(trend_lai,  trend_EI, trend_rs, trend_tmean, trend_pr, trend_vpd ) %>% reshape2::melt() %>%
+  transform(Time = "SSP585")
+
+multi_long = rbind(multi_long1,multi_long2)
+
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+
+
+statis_plot = multi_long %>% 
+  group_by(variable,Time) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            mean = mean(value, na.rm = TRUE),
+            Q25 = quantile(value,probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(value,probs = 0.75, na.rm = TRUE),
+            se = se(value,na.rm = T)) 
+
+ggplot(data = statis_plot,aes(x= variable, y=median,color= Time))+ 
+  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75,color = Time), width=0,size=1, 
+                position=position_dodge(0.8))+scale_color_manual(values=c( "#FFBE7A","#FA7F6F"))+
+  geom_point(data = statis_plot,aes(x= variable, y= median,fill = Time),position=position_dodge(0.8),size=4)+
+  labs(x="Variable", y = "Sensitivity") +
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="none",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))+ facet_wrap(~ variable, ncol=6,scales = "free")
+##############################################################################
+sensi1 <- stack("trend_var_EI_SSP245.tif") 
+
+multi_frame1 <-
+  as.data.frame(sensi1 , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+
+multi_long1 = multi_frame1 %>% dplyr::select(trend_lai, trend_pr, trend_tmean, trend_vpd, trend_rs ) %>% reshape2::melt() %>%
+  transform(Time = "SSP245")
+
+sensi2 <- stack("trend_var_EI_SSP585.tif") 
+
+multi_frame2 <-
+  as.data.frame(sensi2, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+
+multi_long2 = multi_frame2 %>% dplyr::select(trend_lai, trend_pr, trend_tmean, trend_vpd, trend_rs ) %>% reshape2::melt() %>%
+  transform(Time = "SSP585")
+
+multi_long = rbind(multi_long1,multi_long2)
+
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+
+
+statis_plot = multi_long %>% 
+  group_by(variable,Time) %>%
+  summarise(median = median(value, na.rm = TRUE)*100,
+            mean = mean(value, na.rm = TRUE)*100,
+            Q25 = quantile(value,probs = 0.25, na.rm = TRUE)*100,
+            Q75 = quantile(value,probs = 0.75, na.rm = TRUE)*100,
+            se = se(value,na.rm = T)*100) 
+
+ggplot(data = statis_plot,aes(x= variable, y=mean,color= Time))+ 
+  geom_bar(data = statis_plot,aes(x= variable, y=mean,color= Time),position=position_dodge(0.8), stat="identity",fill = NA,width = 0.8)+
+  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75,color = Time), width=0,size=1, 
+                position=position_dodge(0.8))+scale_color_manual(values=c( "#FFBE7A","#FA7F6F"))+
+  geom_point(data = statis_plot,aes(x= variable, y= median,fill = Time),position=position_dodge(0.8),size=4)+
+  labs(x="Variable", y = "Trend by variable") +geom_text(aes(label = round(mean,digits = 2)),size = 5,hjust = 0.5, nudge_x = 0.4,nudge_y = 0.1)+
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="none",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+##############################################################################
+
+sensi1 <- stack("all_ratio_SSP245.tif") 
+
+multi_frame1 <-
+  as.data.frame(sensi1 , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+
+multi_long1 = multi_frame1 %>% dplyr::select(vege_ratio,climate_ratio) %>% reshape2::melt() %>%
+  transform(Time = "SSP245")
+
+sensi2 <- stack("all_ratio_SSP585.tif") 
+
+multi_frame2 <-
+  as.data.frame(sensi2, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+
+multi_long2 = multi_frame2 %>% dplyr::select(vege_ratio,climate_ratio) %>% reshape2::melt() %>%
+  transform(Time = "SSP585")
+
+multi_long = rbind(multi_long1,multi_long2)
+
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+
+
+statis_plot = multi_long %>% 
+  group_by(variable,Time) %>%
+  summarise(median = median(value, na.rm = TRUE)*100,
+            mean = mean(value, na.rm = TRUE)*100,
+            Q25 = quantile(value,probs = 0.25, na.rm = TRUE)*100,
+            Q75 = quantile(value,probs = 0.75, na.rm = TRUE)*100,
+            se = se(value,na.rm = T)*100) 
+
+ggplot(data = statis_plot,aes(x= variable, y=mean,color= Time))+ 
+  geom_bar(data = statis_plot,aes(x= variable, y=mean,color= Time),position=position_dodge(0.8), stat="identity",fill = NA,width = 0.8)+
+  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75,color = Time), width=0,size=1, 
+                position=position_dodge(0.8))+scale_color_manual(values=c( "#FFBE7A","#FA7F6F"))+
+  geom_point(data = statis_plot,aes(x= variable, y= median,fill = Time),position=position_dodge(0.8),size=4)+
+  labs(x="Variable", y = "Trend by variable") +geom_text(aes(label = round(mean,digits = 2)),size = 5,hjust = 0.5, nudge_x = 0.4,nudge_y = 0.1)+
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="none",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

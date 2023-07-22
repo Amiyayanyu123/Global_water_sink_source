@@ -1,0 +1,253 @@
+library(raster)
+library(tidyverse)
+library(ggpubr)
+library(ggpmisc)
+#################################################################################################################LAI
+setwd("F:\\Water_sink_source_CMIP6\\Datasets\\trend_in_cor")
+
+filenames <- list.files(pattern="mv_cor_ET_LAI", full.names=TRUE)
+
+ldf <- lapply(filenames, stack)
+
+stk1 <- terra::rast(filenames)
+
+multi_frame <-
+  as.data.frame(stk1, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+weight <- cos(multi_frame[,"y"]*(pi/180))
+multi_frame[,3:239] = apply(multi_frame[,3:239],2,function(x){x*weight})
+multi_frame = multi_frame %>% filter_all(all_vars(. <= quantile(., 0.99, na.rm = TRUE)
+                                                  & . >= quantile(., 0.01, na.rm = TRUE)))
+#
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+##################################
+multi_long = multi_frame %>% dplyr::select(-x,-y) %>% reshape2::melt()
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE),
+            se = se(value, na.rm = TRUE))%>% transform(UID = "1")
+statis_plot$ID =as.data.frame(strsplit(as.character(statis_plot$variable), split = "_"))[1,] %>% as.vector()%>% 
+  as.numeric() + 1850
+
+####################
+library(devtools)
+scaleFUN <- function(x) sprintf("%.2f", x)
+#
+A1 = ggplot(statis_plot, aes(x=ID, y= mean,color = UID,fill = UID))+ 
+  geom_ribbon(aes(ymin=mean - 2*se, ymax=mean + 2*se),alpha=0.2,colour = NA)+
+  geom_line(size = 0.8)+ scale_y_continuous(labels=scaleFUN)+
+  labs(x="Year", y = "Cor(ET,LAI)") +geom_smooth(formula = 'y ~ x',method = "lm",color = "#434343",fill = "#91989F")+
+  stat_poly_eq(formula = y ~ x,aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), 
+ parse=TRUE,label.y.npc = "bottom",label.x.npc = "right",size = 6)+ scale_y_continuous(labels=scaleFUN)+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="none",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+#################################################################################################################LAI
+setwd("F:\\Water_sink_source_CMIP6\\Datasets\\trend_in_cor")
+
+filenames <- list.files(pattern="mv_cor_ET_VPD", full.names=TRUE)
+
+ldf <- lapply(filenames, stack)
+
+stk1 <- terra::rast(filenames)
+
+multi_frame <-
+  as.data.frame(stk1, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+weight <- cos(multi_frame[,"y"]*(pi/180))
+multi_frame[,3:239] = apply(multi_frame[,3:239],2,function(x){x*weight})
+multi_frame = multi_frame %>% filter_all(all_vars(. <= quantile(., 0.99, na.rm = TRUE)
+                                                  & . >= quantile(., 0.01, na.rm = TRUE)))
+#
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+##################################
+multi_long = multi_frame %>% dplyr::select(-x,-y) %>% reshape2::melt()
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE),
+            se = se(value, na.rm = TRUE))%>% transform(UID = "1")
+statis_plot$ID =as.data.frame(strsplit(as.character(statis_plot$variable), split = "_"))[1,] %>% as.vector()%>% 
+  as.numeric() + 1850
+
+####################
+library(devtools)
+scaleFUN <- function(x) sprintf("%.2f", x)
+#
+B1 = ggplot(statis_plot, aes(x=ID, y= mean,color = UID,fill = UID))+ geom_ribbon(aes(ymin=mean - 2*se, ymax=mean + 2*se),alpha=0.2,colour = NA)+
+  geom_line(size = 0.8)+ scale_y_continuous(labels=scaleFUN)+
+  labs(x="Year", y = "Cor(ET,VPD)") +geom_smooth(formula = 'y ~ x',method = "lm",color = "#434343",fill = "#91989F")+
+  stat_poly_eq(formula = y ~ x,aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), 
+               parse=TRUE,label.y.npc = "bottom",label.x.npc = "right",size = 6)+ scale_y_continuous(labels=scaleFUN)+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="none",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+#################################################################################################################LAI
+setwd("F:\\Water_sink_source_CMIP6\\Datasets\\trend_in_cor")
+
+filenames <- list.files(pattern="mv_cor_ET_Rs", full.names=TRUE)
+
+ldf <- lapply(filenames, stack)
+
+stk1 <- terra::rast(filenames)
+
+multi_frame <-
+  as.data.frame(stk1, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+weight <- cos(multi_frame[,"y"]*(pi/180))
+multi_frame[,3:239] = apply(multi_frame[,3:239],2,function(x){x*weight})
+multi_frame = multi_frame %>% filter_all(all_vars(. <= quantile(., 0.99, na.rm = TRUE)
+                                                  & . >= quantile(., 0.01, na.rm = TRUE)))
+#
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+##################################
+multi_long = multi_frame %>% dplyr::select(-x,-y) %>% reshape2::melt()
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE),
+            se = se(value, na.rm = TRUE))%>% transform(UID = "1")
+statis_plot$ID =as.data.frame(strsplit(as.character(statis_plot$variable), split = "_"))[1,] %>% as.vector()%>% 
+  as.numeric() + 1850
+
+####################
+library(devtools)
+scaleFUN <- function(x) sprintf("%.2f", x)
+#
+C1 = ggplot(statis_plot, aes(x=ID, y= mean,color = UID,fill = UID))+ geom_ribbon(aes(ymin=mean - 2*se, ymax=mean + 2*se),alpha=0.2,colour = NA)+
+  geom_line(size = 0.8)+ scale_y_continuous(labels=scaleFUN)+
+  labs(x="Year", y = "Cor(ET,Rs)") +geom_smooth(formula = 'y ~ x',method = "lm",color = "#434343",fill = "#91989F")+
+  stat_poly_eq(formula = y ~ x,aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), 
+               parse=TRUE,label.y.npc = "bottom",label.x.npc = "right",size = 6)+ scale_y_continuous(labels=scaleFUN)+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="none",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+#################################################################################################################LAI
+setwd("F:\\Water_sink_source_CMIP6\\Datasets\\trend_in_cor")
+
+filenames <- list.files(pattern="mv_cor_ET_Temp", full.names=TRUE)
+
+ldf <- lapply(filenames, stack)
+
+stk1 <- terra::rast(filenames)
+
+multi_frame <-
+  as.data.frame(stk1, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+weight <- cos(multi_frame[,"y"]*(pi/180))
+multi_frame[,3:239] = apply(multi_frame[,3:239],2,function(x){x*weight})
+multi_frame = multi_frame %>% filter_all(all_vars(. <= quantile(., 0.99, na.rm = TRUE)
+                                                  & . >= quantile(., 0.01, na.rm = TRUE)))
+#
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+##################################
+multi_long = multi_frame %>% dplyr::select(-x,-y) %>% reshape2::melt()
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE),
+            se = se(value, na.rm = TRUE))%>% transform(UID = "1")
+statis_plot$ID =as.data.frame(strsplit(as.character(statis_plot$variable), split = "_"))[1,] %>% as.vector()%>% 
+  as.numeric() + 1850
+
+####################
+library(devtools)
+scaleFUN <- function(x) sprintf("%.2f", x)
+#
+D1 = ggplot(statis_plot, aes(x=ID, y= mean,color = UID,fill = UID))+ geom_ribbon(aes(ymin=mean - 2*se, ymax=mean + 2*se),alpha=0.2,colour = NA)+
+  geom_line(size = 0.8)+ scale_y_continuous(labels=scaleFUN)+
+  labs(x="Year", y = "Cor(ET,Temp)") +geom_smooth(formula = 'y ~ x',method = "lm",color = "#434343",fill = "#91989F")+
+  stat_poly_eq(formula = y ~ x,aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), 
+               parse=TRUE,label.y.npc = "bottom",label.x.npc = "right",size = 6)+ scale_y_continuous(labels=scaleFUN)+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="none",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+#################################################################################################################LAI
+setwd("F:\\Water_sink_source_CMIP6\\Datasets\\trend_in_cor")
+
+filenames <- list.files(pattern="mv_cor_ET_Pr", full.names=TRUE)
+
+ldf <- lapply(filenames, stack)
+
+stk1 <- terra::rast(filenames)
+
+multi_frame <-
+  as.data.frame(stk1, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+weight <- cos(multi_frame[,"y"]*(pi/180))
+multi_frame[,3:239] = apply(multi_frame[,3:239],2,function(x){x*weight})
+multi_frame = multi_frame %>% filter_all(all_vars(. <= quantile(., 0.99, na.rm = TRUE)
+                                                  & . >= quantile(., 0.01, na.rm = TRUE)))
+#
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+##################################
+multi_long = multi_frame %>% dplyr::select(-x,-y) %>% reshape2::melt()
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE),
+            se = se(value, na.rm = TRUE))%>% transform(UID = "1")
+statis_plot$ID =as.data.frame(strsplit(as.character(statis_plot$variable), split = "_"))[1,] %>% as.vector()%>% 
+  as.numeric() + 1850
+
+####################
+library(devtools)
+scaleFUN <- function(x) sprintf("%.2f", x)
+#
+E1 = ggplot(statis_plot, aes(x=ID, y= mean,color = UID,fill = UID))+ geom_ribbon(aes(ymin=mean - 2*se, ymax=mean + 2*se),alpha=0.2,colour = NA)+
+  geom_line(size = 0.8)+ scale_y_continuous(labels=scaleFUN)+
+  labs(x="Year", y = "Cor(ET,Pre)") +geom_smooth(formula = 'y ~ x',method = "lm",color = "#434343",fill = "#91989F")+
+  stat_poly_eq(formula = y ~ x,aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), 
+               parse=TRUE,label.y.npc = "bottom",label.x.npc = "right",size = 6)+ scale_y_continuous(labels=scaleFUN)+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="none",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+ggarrange(A1,B1,C1,D1,E1,ncol = 2, nrow = 3)

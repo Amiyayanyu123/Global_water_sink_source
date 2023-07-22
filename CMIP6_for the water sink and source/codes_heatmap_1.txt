@@ -1,0 +1,198 @@
+library(raster)
+library(xts)
+library(lubridate)
+library(tidyverse)
+
+
+
+setwd("G:\\Water_sink_source\\2015_2100_compare")
+
+ratio <- stack("all_ratio_SSP585.tif")
+ratio = ratio$vege_ratio
+
+effect <- stack("trend_var_total_1SSP585.tif")
+effect = effect$vege
+
+sensi <- stack("coeff_model1_SSP585.tif")
+sensi = sensi$ LAI_EI
+
+AI <- stack("AI_SSP585.tif")
+LAI <- stack("LAI_mean_SSP585.tif")
+####################################
+multi_frame <-
+  as.data.frame(LAI , xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+multi_frame$sensi = raster::extract(sensi ,multi_frame[,1:2])
+multi_frame$DI = raster::extract(AI ,multi_frame[,1:2])
+multi_frame$ratio = raster::extract(ratio ,multi_frame[,1:2])
+multi_frame$effect = raster::extract(effect ,multi_frame[,1:2]) 
+multi_frame = multi_frame %>% na.omit()
+colnames(multi_frame) = c("x","y","LAI","sensi","DI","ratio","effect")
+
+
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+
+##############################################
+##############################################
+statis_plot = multi_frame %>%  na.omit() %>%
+  mutate(bin_DI = cut(DI, breaks = c(seq(0,2,by=0.2),Inf))) %>% 
+  mutate(bin_LAI = cut(LAI, breaks = c(seq(0,6,by=0.5),Inf))) %>% 
+  group_by(bin_DI,bin_LAI) %>% 
+  summarise(median = median(sensi, na.rm = TRUE)) %>% 
+  filter( !bin_DI %in% c("(0,0.2]","(2,Inf]") & !bin_LAI %in% c("(0,0.5]","(6,Inf]") ) %>% na.omit()
+
+
+ggplot(statis_plot, aes(x = bin_LAI, y = bin_DI, fill = median)) + 
+  geom_tile()+
+  scale_fill_distiller(palette = "Spectral",limits = c(0, 0.5)) +labs(x="LAI", y = "P/PET") +
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="right",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+##############################################
+statis_plot = multi_frame %>% na.omit() %>%
+  mutate(bin_DI = cut(DI, breaks = c(seq(0,2,by=0.2),Inf))) %>% 
+  group_by(bin_DI) %>% 
+  summarise(median = median(sensi, na.rm = TRUE),
+            Q25 = quantile(sensi,probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(sensi,probs = 0.75, na.rm = TRUE) ) %>%
+  filter( !bin_DI %in% c("(0,0.2]","(2,Inf]") ) %>% na.omit()
+
+ggplot(statis_plot, aes(x = bin_DI, y = median,group = 1)) +geom_point(size = 2)+
+  geom_errorbar(data = statis_plot,aes(x= bin_DI, y= median, ymin=Q25, ymax=Q75), width=0,size=1, 
+                position=position_dodge(0.8))+ geom_line(size = 0.5) +labs(x="P/PET", y = "d(AET/P)/dLAI") +
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        axis.text.x = element_text(size=14,angle = 60),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="right",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+##############################################
+statis_plot = multi_frame %>% na.omit() %>%
+  mutate(bin_LAI = cut(LAI, breaks = c(seq(0,6,by=0.5),Inf))) %>% 
+  group_by(bin_LAI) %>% 
+  summarise(median = median(sensi, na.rm = TRUE),
+            Q25 = quantile(sensi,probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(sensi,probs = 0.75, na.rm = TRUE) ) %>%
+  filter( !bin_LAI %in% c("(0,0.5]","(6,Inf]") ) %>% na.omit()
+
+ggplot(statis_plot, aes(x = bin_LAI, y = median,group = 1)) +geom_point(size = 2)+
+  geom_errorbar(data = statis_plot,aes(x= bin_LAI, y= median, ymin=Q25, ymax=Q75), width=0,size=1, 
+                position=position_dodge(0.8))+ geom_line(size = 0.5) +labs(x="LAI", y = "d(AET/P)/dLAI") +
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        axis.text.x = element_text(size=14,angle = 60),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="right",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+#####################################################################################################
+################################################################################ Figure2
+
+statis_plot = multi_frame %>%  na.omit() %>%
+  mutate(bin_DI = cut(DI, breaks = c(seq(0,2,by=0.2),Inf))) %>% 
+  mutate(bin_LAI = cut(LAI, breaks = c(seq(0,6,by=0.5),Inf))) %>% 
+  group_by(bin_DI,bin_LAI) %>% 
+  summarise(median = median(ratio, na.rm = TRUE)) %>% 
+  filter( !bin_DI %in% c("(0,0.2]","(2,Inf]") & !bin_LAI %in% c("(0,0.5]","(6,Inf]") ) %>% na.omit()
+
+
+ggplot(statis_plot, aes(x = bin_LAI, y = bin_DI, fill = median)) + 
+  geom_tile()+
+  scale_fill_distiller(palette = "Spectral",limits = c(0, 0.65)) +labs(x="LAI", y = "P/PET") +
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="right",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+##############################################
+statis_plot = multi_frame %>% na.omit() %>%
+  mutate(bin_DI = cut(DI, breaks = c(seq(0,2,by=0.2),Inf))) %>% 
+  group_by(bin_DI) %>% 
+  summarise(median = median(ratio, na.rm = TRUE),
+            Q25 = quantile(ratio,probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(ratio,probs = 0.75, na.rm = TRUE) ) %>%na.omit()
+
+statis_plot = multi_frame %>% na.omit() %>%
+  mutate(bin_DI = cut(sensi, breaks = c(seq(0,2,by=0.2),Inf))) %>% 
+  group_by(bin_DI) %>% count()
+  summarise(median = median(ratio, na.rm = TRUE)) %>%na.omit()
+
+
+
+ggplot(statis_plot, aes(x = bin_DI, y = median,group = 1)) +geom_point(size = 2)+
+  geom_errorbar(data = statis_plot,aes(x= bin_DI, y= median, ymin=Q25, ymax=Q75), width=0,size=1, 
+                position=position_dodge(0.8))+ geom_line(size = 0.5) +labs(x="P/PET", y = "d(AET/P)/dLAI") +
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        axis.text.x = element_text(size=14,angle = 60),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="right",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+##############################################
+statis_plot = multi_frame %>% na.omit() %>%
+  mutate(bin_LAI = cut(LAI, breaks = c(seq(0,6,by=0.5),Inf))) %>% 
+  group_by(bin_LAI) %>% 
+  summarise(median = median(ratio, na.rm = TRUE),
+            Q25 = quantile(ratio,probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(ratio,probs = 0.75, na.rm = TRUE) ) %>%
+  filter( !bin_LAI %in% c("(0,0.5]","(6,Inf]") ) %>% na.omit()
+
+ggplot(statis_plot, aes(x = bin_LAI, y = median,group = 1)) +geom_point(size = 2)+
+  geom_errorbar(data = statis_plot,aes(x= bin_LAI, y= median, ymin=Q25, ymax=Q75), width=0,size=1, 
+                position=position_dodge(0.8))+ geom_line(size = 0.5) +labs(x="LAI", y = "d(AET/P)/dLAI") +
+  theme(axis.title=element_text(size=14,face="bold",color="black"),
+        axis.text = element_text(size=14,face="plain",color="black"),
+        axis.text.x = element_text(size=14,angle = 60),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=14),
+        legend.position="right",
+        legend.text = element_text(size=14
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,92 @@
+library(ncdf4) # package for netcdf manipulation
+library(raster) # package for raster manipulation
+library(ggplot2) # package for plotting
+library(lubridate)
+library(tidyverse)
+library(ggpmisc)
+#########################################################################################historical
+setwd("F:\\Water_sink_source_CMIP6\\Datasets\\30yr_ridgeregression_SSP585")
+
+filenames <- list.files(pattern="trend_var_EI_1", full.names=TRUE)
+ldf <- lapply(filenames, stack)
+
+stk1 <- terra::rast(filenames)
+
+multi_frame_1 <-
+  as.data.frame(stk1, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+  
+colnames(multi_frame_1) =  c(names(multi_frame_1)[1:2],paste(names(multi_frame_1)[3:7],"_1",sep=""))
+
+##
+filenames <- list.files(pattern="trend_var_EI_2", full.names=TRUE)
+ldf <- lapply(filenames, stack)
+
+stk1 <- terra::rast(filenames)
+
+multi_frame_2 <-
+  as.data.frame(stk1, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+colnames(multi_frame_2) =  c(names(multi_frame_1)[1:2],paste(names(multi_frame_1)[3:7],"_2",sep=""))
+
+###
+filenames <- list.files(pattern="trend_var_EI_3", full.names=TRUE)
+ldf <- lapply(filenames, stack)
+
+stk1 <- terra::rast(filenames)
+
+multi_frame_3 <-
+  as.data.frame(stk1, xy = TRUE) %>%
+  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+
+colnames(multi_frame_3) =  c(names(multi_frame_1)[1:2],paste(names(multi_frame_1)[3:7],"_3",sep=""))
+
+muti_frame = merge(multi_frame_1,multi_frame_2)
+muti_frame = merge(muti_frame,multi_frame_3)
+
+weight <- cos(muti_frame[,"y"]*(pi/180))
+muti_frame[,3:17] = apply(muti_frame[,3:17],2,function(x){x*weight})
+muti_frame = muti_frame %>% filter_all(all_vars(. <= quantile(., 0.95, na.rm = TRUE)
+                                                  & . >= quantile(., 0.05, na.rm = TRUE)))
+
+#
+se <- function(x, na.rm=FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x)/length(x))
+}
+##################################
+multi_long = muti_frame %>% dplyr::select(-x,-y) %>% reshape2::melt()
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE),
+            se = se(value, na.rm = TRUE))
+
+####################
+library(devtools)
+all1 = rbind(statis_plot,statis_plot_1)
+all2 = rbind(all1,statis_plot_2)
+scaleFUN <- function(x) sprintf("%.2f", x)
+#
+A2 = ggplot(all2, aes(x=ID, y= mean,color = UID,fill = UID))+ geom_ribbon(aes(ymin=mean - 2*se, ymax=mean + 2*se),alpha=0.2,colour = NA)+
+  geom_line(size = 0.8)+geom_hline(yintercept=0, linetype="dashed", color = "black")+
+  stat_poly_eq(formula = y ~ x,aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), 
+               parse=TRUE,label.y.npc = "bottom",label.x.npc = "right",size = 6)+ scale_y_continuous(labels=scaleFUN)+
+  labs(x="Year", y = "Slope(ET,LAI)") +scale_color_manual(values=c("#ffa60f","#ed5a65","#2486b9"))+
+  scale_fill_manual(values=c("#ffa60f","#ed5a65","#2486b9"))+
+  theme(axis.title=element_text(size=20,face="bold",color="black"),
+        axis.text = element_text(size=18,face="plain",color="black"),
+        panel.background=element_rect(colour="black",fill=NA),
+        panel.grid.minor=element_blank(),
+        text=element_text(size=18),
+        legend.position="none",
+        legend.text = element_text(size=18
+        ),legend.background=element_rect(colour=NA,fill=NA),
+        axis.ticks=element_line(colour="black"))
+
+
+
+
+
+
+
