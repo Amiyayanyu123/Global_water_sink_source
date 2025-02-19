@@ -1,0 +1,331 @@
+# Load necessary libraries
+library(reshape2)
+library(tidyverse)
+library(bootstrap)
+library(QuantPsyc)  # This package can be used to compute standardized beta coefficients (e.g., using lm.beta)
+library(relaimpo)
+library(psych)
+library(ggplot2)
+# Remove spatial autocorrelation
+library(nlme)
+library(ape)
+library(MuMIn)
+library(ggstatsplot)
+library(rsq)
+library(extrafont)
+library(car)
+library(bfast)
+library(remotes)
+library(zoo)
+library(tidyverse)
+library(mblm)
+library(reshape2)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(glmnet)
+
+# ####################################################
+# # Define a function to check if a CSV file contains specified column names
+# check_csv_file <- function(file_path, columns) {
+#   # Read the CSV file
+#   csv_data <- read_csv(file_path)
+#   
+#   # Check if all specified columns are present in the CSV file
+#   if (all(columns %in% colnames(csv_data))) {
+#     # If the CSV file contains the specified columns, add the file name to the output list
+#     file_name <- basename(file_path)
+#     output_list <<- append(output_list, file_name)
+#   }
+# }
+# 
+# # Set the file path for reading
+# path <- "F:\\Fluxnet\\YY"
+# 
+# # Specify the columns to search for
+# search_columns <- c("TA_F_MDS", "TIMESTAMP", "P_F",
+#                     "LE_F_MDS", "VPD_F_MDS", "TA_F_MDS")
+# 
+# # Initialize an empty list to store file names that contain the specified columns
+# output_list <- list()
+# 
+# # Iterate over all CSV files in the specified folder and call the function to check each file
+# files <- list.files(path, pattern = "\\.csv$", full.names = TRUE)
+# walk(files, ~ check_csv_file(.x, search_columns))
+# 
+# # Output the file names that contain the specified columns
+# cat(paste(output_list, collapse = "\n"))
+# ####################################################
+
+##############################################
+# Define file path and file names
+path = "F:\\Fluxnet\\YY"
+file = "FLX_US-Ton_FLUXNET2015_FULLSET_YY_2001-2014_1-4.csv"
+filesnames <- list.files(path, pattern = "\\.csv$")
+
+# Initialize empty objects for storing combined results
+combined_data_sensi <- {}
+combined_data_trend <- {}
+combined_data_contri <- {}
+
+# Loop over each CSV file in the folder
+for (file in filesnames) {
+  # Read the CSV file; treat "-9999" as NA values
+  csv_data <- read.csv(file.path(path, file), header = TRUE, na = "-9999")
+  
+  # Extract file name and add it as a new column in the data frame
+  csv_data$file_name <- file
+  
+  # Select and rename relevant columns; calculate EI as ET/Pre
+  csv_data <- csv_data %>% 
+    dplyr::select(TIMESTAMP, file_name, TA_F_MDS, P_F, LE_F_MDS, VPD_F_MDS, GPP_DT_VUT_MEAN, SW_IN_F_MDS) %>% 
+    rename(
+      time = TIMESTAMP,
+      station = file_name,
+      Tmean = TA_F_MDS,
+      Pre = P_F,
+      ET = LE_F_MDS,
+      VPD = VPD_F_MDS,
+      GPP = GPP_DT_VUT_MEAN,
+      Rs = SW_IN_F_MDS
+    ) %>%
+    mutate(EI = ET / Pre)
+  
+  # Remove rows with missing values for regression analysis
+  regression = csv_data %>% na.omit()
+  
+  if (nrow(regression) > 10) {
+    # Standardize selected variables for ridge regression and convert to data frame
+    ridge_data = regression %>% 
+      dplyr::select(Tmean, Pre, VPD, GPP, Rs, EI) %>% 
+      scale(center = TRUE, scale = TRUE) %>% 
+      as.data.frame()
+    
+    # Define predictor matrix x and response vector y for regression
+    x = as.matrix(ridge_data %>% dplyr::select(Tmean, Pre, VPD, GPP, Rs))
+    y = ridge_data$EI
+    
+    # Fit a ridge regression model (alpha = 0 for ridge) with lambda = 1
+    model = glmnet(x = x, y = y, alpha = 0, lambda = 1)
+    
+    # Tidy the model output using broom package
+    tidy_model_output <- broom::tidy(model)
+    
+    # Predict y values using the model
+    y_predicted <- predict(model, s = 1, newx = x)
+    
+    # Calculate Total Sum of Squares (SST) and Sum of Squared Errors (SSE)
+    sst <- sum((y - mean(y))^2)
+    sse <- sum((y_predicted - y)^2)
+    
+    # Compute R-squared value
+    rsq <- 1 - sse / sst
+    
+    # Combine model output with R-squared and add file identifier (SID)
+    all = cbind(tidy_model_output, rsq) %>% transform(SID = file)
+    
+    ###############################################################
+    # Trend analysis
+    # Standardize selected variables for trend analysis and convert to data frame
+    df = regression %>% 
+      dplyr::select(Tmean, Pre, VPD, GPP, Rs, EI) %>% 
+      scale(center = TRUE, scale = TRUE) %>% 
+      as.data.frame()
+    
+    # Combine time column with standardized data
+    df = cbind(regression %>% dplyr::select(time), df)
+    
+    # Calculate trend coefficients using linear regression for each variable
+    trend = df %>%  
+      pivot_longer(-1) %>% 
+      group_by(name) %>% 
+      summarise(
+        coefficients = list(coef(lm(value ~ df[, 1])))
+      ) %>% 
+      unnest_wider(coefficients)
+    
+    # Calculate p-values for the trend coefficients
+    p = df %>%  
+      pivot_longer(-1) %>% 
+      group_by(name) %>% 
+      summarise(
+        p_values = list(summary(lm(value ~ df[, 1]))$coefficients[, 4])
+      ) %>% 
+      unnest_wider(p_values)
+    
+    # Rename columns for clarity
+    colnames(trend) = c("term", "intercept_trend", "trend")
+    colnames(p) = c("term", "intercept_p", "p")
+    
+    # Merge trend coefficients with their corresponding p-values
+    trend = merge(trend, p)
+    ###################################################################
+    # Combine model estimates with trend analysis results and calculate contribution
+    all_contri = merge(all, trend) %>% mutate(contri = estimate * trend)
+    
+  } else {
+    # If there are not enough data points, create empty data frames for the outputs
+    all = data.frame()
+    all_contri = data.frame()
+    trend = data.frame()
+  }
+  
+  # Append the current file's results to the overall combined data frames
+  combined_data_sensi <- bind_rows(combined_data_sensi, all)
+  combined_data_trend <- bind_rows(combined_data_trend, trend)
+  combined_data_contri <- bind_rows(combined_data_contri, all_contri)
+}
+
+###############################################################################################
+# Extract unique site identifiers from the sensitivity data
+Sites = unique(combined_data_sensi$SID)
+
+# Plot boxplot of R-squared values from the sensitivity analysis
+unique(combined_data_sensi$rsq) %>% boxplot()
+
+# Summary statistics for sensitivity estimates by variable
+statis_plot = combined_data_sensi %>% group_by(term) %>% 
+  summarise(
+    Q50 = median(estimate),
+    mean = mean(estimate),
+    Q25 = quantile(estimate, probs = 0.25),
+    Q75 = quantile(estimate, probs = 0.75)
+  ) %>% as.data.frame() %>% .[-1,]
+
+# Create bar plot with error bars for sensitivity estimates
+ggplot(data = statis_plot, aes(x = term, y = mean)) + 
+  geom_bar(position = "stack", stat = "identity", color = "grey", fill = NA, size = 1) +
+  geom_errorbar(aes(y = Q50, ymin = Q25, ymax = Q75), width = 0, size = 1, color = "grey", 
+                position = position_dodge(0.3)) +
+  geom_point(aes(y = Q50), position = position_dodge(0.3), size = 4, color = "grey") +
+  labs(x = "Variable", y = "Sensitivity") +
+  geom_text(aes(label = round(mean, digits = 2)), size = 5, hjust = 0.5, nudge_x = 0.2) +
+  theme(
+    axis.title = element_text(size = 14, face = "bold", color = "black"),
+    axis.text = element_text(size = 14, face = "plain", color = "black"),
+    panel.background = element_rect(colour = "black", fill = NA),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 14),
+    legend.position = "none",
+    legend.text = element_text(size = 14),
+    legend.background = element_rect(colour = NA, fill = NA),
+    axis.ticks = element_line(colour = "black")
+  )
+
+######################################################################################################
+# Trend analysis plot
+statis_plot = combined_data_trend %>% group_by(term) %>% 
+  summarise(
+    Q50 = median(trend) * 10,
+    mean = mean(trend) * 10,
+    Q25 = quantile(trend, probs = 0.25) * 10,
+    Q75 = quantile(trend, probs = 0.75) * 10
+  ) %>% as.data.frame()
+
+ggplot(data = statis_plot, aes(x = term, y = mean)) + 
+  geom_bar(position = "stack", stat = "identity", color = "grey", fill = NA, size = 1) +
+  geom_errorbar(aes(y = Q50, ymin = Q25, ymax = Q75), width = 0, size = 1, color = "grey", 
+                position = position_dodge(0.3)) +
+  geom_point(aes(y = Q50), position = position_dodge(0.3), size = 4, color = "grey") +
+  labs(x = "Variable", y = "Trend") +
+  geom_text(aes(label = round(mean, digits = 2)), size = 5, hjust = 0.5, nudge_x = 0.2) +
+  theme(
+    axis.title = element_text(size = 14, face = "bold", color = "black"),
+    axis.text = element_text(size = 14, face = "plain", color = "black"),
+    panel.background = element_rect(colour = "black", fill = NA),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 14),
+    legend.position = "none",
+    legend.text = element_text(size = 14),
+    legend.background = element_rect(colour = NA, fill = NA),
+    axis.ticks = element_line(colour = "black")
+  )
+
+######################################################################################################
+# Contribution analysis plot
+statis_plot = combined_data_contri %>% group_by(term) %>% 
+  summarise(
+    Q50 = median(contri) * 10,
+    mean = mean(contri) * 10,
+    Q25 = quantile(contri, probs = 0.25) * 10,
+    Q75 = quantile(contri, probs = 0.75) * 10
+  ) %>% as.data.frame()
+
+ggplot(data = statis_plot, aes(x = term, y = mean)) + 
+  geom_bar(position = "stack", stat = "identity", color = "grey", fill = NA, size = 1) +
+  geom_errorbar(aes(y = Q50, ymin = Q25, ymax = Q75), width = 0, size = 1, color = "grey", 
+                position = position_dodge(0.3)) +
+  geom_point(aes(y = Q50), position = position_dodge(0.3), size = 4, color = "grey") +
+  labs(x = "Variable", y = "Trend by variables") +
+  geom_text(aes(label = round(mean, digits = 2)), size = 5, hjust = 0.5, nudge_x = 0.2) +
+  theme(
+    axis.title = element_text(size = 14, face = "bold", color = "black"),
+    axis.text = element_text(size = 14, face = "plain", color = "black"),
+    panel.background = element_rect(colour = "black", fill = NA),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 14),
+    legend.position = "none",
+    legend.text = element_text(size = 14),
+    legend.background = element_rect(colour = NA, fill = NA),
+    axis.ticks = element_line(colour = "black")
+  )
+
+######################################################################################################
+# Analyze the relative contributions of climate and vegetation variables
+selected_climate <- combined_data_contri %>% 
+  filter(term %in% c("Pre", "Rs", "Tmean", "VPD")) %>% 
+  dplyr::select(contri, SID) %>% 
+  group_by(SID) %>% 
+  summarise(Climate = sum(contri))
+
+selected_vegetation <- combined_data_contri %>% 
+  filter(term %in% c("GPP")) %>% 
+  dplyr::select(contri, SID) %>% 
+  group_by(SID) %>% 
+  summarise(Vege = sum(contri))
+
+# Merge climate and vegetation contributions
+select_all = merge(selected_climate, selected_vegetation)
+
+# Calculate the relative contributions for climate and vegetation
+select_all$contri_cli = abs(select_all$Climate) / (abs(select_all$Climate) + abs(select_all$Vege))
+select_all$contri_vege = abs(select_all$Vege) / (abs(select_all$Climate) + abs(select_all$Vege))
+
+# Melt the data for plotting
+plot = select_all %>% 
+  dplyr::select(SID, contri_cli, contri_vege) %>% 
+  reshape2::melt()
+
+# Compute summary statistics for the contributions (percentage)
+statis_plot = plot %>% 
+  group_by(variable) %>%
+  summarise(
+    median = median(value, na.rm = TRUE) * 100,
+    mean = mean(value, na.rm = TRUE) * 100,
+    Q25 = quantile(value, probs = 0.25, na.rm = TRUE) * 100,
+    Q75 = quantile(value, probs = 0.75, na.rm = TRUE) * 100
+  )
+
+# Create bar plot with error bars for the contributions of climate and vegetation
+ggplot(data = statis_plot, aes(x = variable, y = mean, fill = variable)) + 
+  geom_bar(position = "stack", stat = "identity", color = "grey", size = 1) +
+  geom_errorbar(aes(y = median, ymin = Q25, ymax = Q75), width = 0, size = 1, color = "grey", 
+                position = position_dodge(0.3)) +
+  geom_point(aes(y = median), position = position_dodge(0.3), size = 4, color = "grey") +
+  labs(x = "Variable", y = "Contribution") +
+  geom_text(aes(label = round(mean, digits = 0)), size = 5, hjust = 0.5, nudge_x = 0.2) +
+  theme(
+    axis.title = element_text(size = 14, face = "bold", color = "black"),
+    axis.text = element_text(size = 14, face = "plain", color = "black"),
+    panel.background = element_rect(colour = "black", fill = NA),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 14),
+    legend.position = "none",
+    legend.text = element_text(size = 14),
+    legend.background = element_rect(colour = NA, fill = NA),
+    axis.ticks = element_line(colour = "black")
+  )
+
+# Set working directory and save the combined contributions data to CSV
+setwd("F:\\Global_water_consumption\\Data\\Fluxnet_data")
+write.table(combined_data_contri, "combined_data_contri.csv", row.names = FALSE, sep = ",")
