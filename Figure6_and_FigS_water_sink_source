@@ -1,0 +1,167 @@
+###################### Statistics for the dangerous regions based on ratio, sensitivity, and the AB ratio
+# Load required libraries for raster manipulation, time series, plotting, and data handling
+library(raster)       # For working with raster data
+library(xts)          # For handling time series data
+library(lubridate)    # For date/time processing (loaded twice; duplicate can be removed)
+library(ggstatsplot)  # For enhanced ggplot2 statistical visualizations
+library(rsq)          # For calculating R-squared for various models
+library(extrafont)    # For using extra fonts in plots
+library(car)          # Companion to Applied Regression functions
+library(bfast)        # For detecting and analyzing abrupt changes in time series
+library(remotes)      # For installing packages from remote repositories
+library(ggpmisc)      # For adding equations and statistical annotations to ggplots
+library(dplyr)        # For data manipulation
+library(lubridate)    # (Duplicate) For date/time manipulation
+library(mice)         # For multiple imputation of missing values
+library(VIM)          # For visualizing and imputing missing data
+
+# -----------------------------------------------------------------------------
+# Set working directory to the folder containing the VOD reproduce data
+setwd("F:\\Global_water_consumption\\Data\\VOD_reproduce")
+
+# Load raster stacks for AB ratio, VOD climate ratio, and classification
+AB <- stack("ratio_direct_indirect.tif")
+ratio <- stack("ratio_VOD_climate.tif")
+class <- stack("division.tif")
+
+# Set working directory to the subfolder where additional data is stored
+setwd("F:\\Global_water_consumption\\Data\\VOD_reproduce\\Data")
+
+# Load sensitivity data (coefficients from ridge regression)
+sensi <- stack("coeff_model1_ridge.tif")
+sensi = sensi$VOD_EI  # Select the VOD_EI layer
+
+# (Optional: The following commented-out code would load additional layers such as PET, Pre, LULC, KNDVI)
+# setwd("F:\\Global_water_sink_source\\ecological")
+# PET <- stack("PET.tif")
+# Pre <- stack("Pre.tif")
+# LULC <- stack("LULC.tif")
+# KNDVI <- stack("KNDVI.tif")
+
+# -----------------------------------------------------------------------------
+# Create a data frame from the AB raster and extract additional variables using spatial extraction
+multi_frame <-
+  as.data.frame(AB, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3))  # Round coordinates to 3 decimals
+
+# Extract values from the other raster layers at the same xy coordinates
+multi_frame$ratio = extract(ratio, multi_frame[, 1:2])
+multi_frame$sensi = extract(sensi, multi_frame[, 1:2])
+multi_frame$class = extract(class, multi_frame[, 1:2])
+
+# Extract additional layers (Precipitation, PET, LULC, KNDVI) if available
+multi_frame$Pre = extract(Pre, multi_frame[, 1:2])
+multi_frame$PET = extract(PET, multi_frame[, 1:2])
+multi_frame$LULC = extract(LULC, multi_frame[, 1:2])
+multi_frame$KNDVI = extract(KNDVI, multi_frame[, 1:2])
+# Compute the DI (Dryness Index) as the ratio of Pre to PET
+multi_frame$DI = multi_frame$Pre / multi_frame$PET
+
+# Define a function to calculate the standard error (SE)
+se <- function(x, na.rm = FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x) / length(x))
+}
+
+#########################################################################
+# Calculate decile statistics for sensitivity
+statis_plot = multi_frame %>% 
+  na.omit() %>%
+  summarise(Q10 = quantile(sensi, probs = 0.10, na.rm = TRUE),
+            Q20 = quantile(sensi, probs = 0.20, na.rm = TRUE),
+            Q30 = quantile(sensi, probs = 0.30, na.rm = TRUE),
+            Q40 = quantile(sensi, probs = 0.40, na.rm = TRUE),
+            Q50 = quantile(sensi, probs = 0.50, na.rm = TRUE),
+            Q60 = quantile(sensi, probs = 0.60, na.rm = TRUE),
+            Q70 = quantile(sensi, probs = 0.70, na.rm = TRUE),
+            Q80 = quantile(sensi, probs = 0.80, na.rm = TRUE),
+            Q90 = quantile(sensi, probs = 0.90, na.rm = TRUE)) %>% 
+  as.data.frame()
+
+# Transpose the summary statistics and add an ID for deciles
+statis_plot = t(statis_plot) %>% transform(ID = seq(1, 9, by = 1))
+
+# Plot a bar chart of sensitivity deciles with labels
+ggplot(data = statis_plot, aes(x = ID, y = X_data)) +
+  geom_bar(stat = "identity", color = "grey", fill = NA, width = 0.7, size = 1) +
+  scale_x_continuous(breaks = seq(0, 10, 1)) +
+  labs(x = "Deciles", y = "Sensitivity") +
+  geom_text(aes(label = round(X_data, digits = 2)), size = 5, hjust = 0.5, nudge_x = 0, nudge_y = 0.02) +
+  theme(axis.title = element_text(size = 14, face = "bold", color = "black"),
+        axis.text  = element_text(size = 14, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 14),
+        legend.position = "none",
+        legend.text = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black"))
+
+#########################################################################
+# Calculate decile statistics for the climate ratio (contribution difference)
+statis_plot = multi_frame %>% 
+  na.omit() %>%
+  summarise(Q10 = quantile(ratio, probs = 0.10, na.rm = TRUE),
+            Q20 = quantile(ratio, probs = 0.20, na.rm = TRUE),
+            Q30 = quantile(ratio, probs = 0.30, na.rm = TRUE),
+            Q40 = quantile(ratio, probs = 0.40, na.rm = TRUE),
+            Q50 = quantile(ratio, probs = 0.50, na.rm = TRUE),
+            Q60 = quantile(ratio, probs = 0.60, na.rm = TRUE),
+            Q70 = quantile(ratio, probs = 0.70, na.rm = TRUE),
+            Q80 = quantile(ratio, probs = 0.80, na.rm = TRUE),
+            Q90 = quantile(ratio, probs = 0.90, na.rm = TRUE)) %>% 
+  as.data.frame()
+
+# Transpose and add an ID column for deciles
+statis_plot = t(statis_plot) %>% transform(ID = seq(1, 9, by = 1))
+
+# Plot the deciles for the ratio with labels
+ggplot(data = statis_plot, aes(x = ID, y = X_data)) +
+  geom_bar(stat = "identity", color = "grey", fill = NA, width = 0.7, size = 1) +
+  scale_x_continuous(breaks = seq(0, 10, 1)) +
+  labs(x = "Deciles", y = "Contribution difference") +
+  geom_text(aes(label = round(X_data, digits = 2)), size = 5, hjust = 0.5, nudge_x = 0, nudge_y = 0.02) +
+  theme(axis.title = element_text(size = 14, face = "bold", color = "black"),
+        axis.text  = element_text(size = 14, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 14),
+        legend.position = "none",
+        legend.text = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black"))
+
+#########################################################################
+# Calculate decile statistics for the AB ratio (direct vs. indirect contribution)
+statis_plot = multi_frame %>% 
+  na.omit() %>%
+  summarise(Q10 = quantile(ratio_direct_indirect, probs = 0.10, na.rm = TRUE),
+            Q20 = quantile(ratio_direct_indirect, probs = 0.20, na.rm = TRUE),
+            Q30 = quantile(ratio_direct_indirect, probs = 0.30, na.rm = TRUE),
+            Q40 = quantile(ratio_direct_indirect, probs = 0.40, na.rm = TRUE),
+            Q50 = quantile(ratio_direct_indirect, probs = 0.50, na.rm = TRUE),
+            Q60 = quantile(ratio_direct_indirect, probs = 0.60, na.rm = TRUE),
+            Q70 = quantile(ratio_direct_indirect, probs = 0.70, na.rm = TRUE),
+            Q80 = quantile(ratio_direct_indirect, probs = 0.80, na.rm = TRUE),
+            Q90 = quantile(ratio_direct_indirect, probs = 0.90, na.rm = TRUE)) %>% 
+  as.data.frame()
+
+# Transpose the data frame and add an ID column for deciles
+statis_plot = t(statis_plot) %>% transform(ID = seq(1, 9, by = 1))
+
+# Plot the AB ratio deciles with labels
+ggplot(data = statis_plot, aes(x = ID, y = X_data)) +
+  geom_bar(stat = "identity", color = "grey", fill = NA, width = 0.7, size = 1) +
+  scale_x_continuous(breaks = seq(0, 10, 1)) +
+  labs(x = "Deciles", y = "Contribution difference") +
+  geom_text(aes(label = round(X_data, digits = 2)), size = 5, hjust = 0.5, nudge_x = 0, nudge_y = 0.02) +
+  theme(axis.title = element_text(size = 14, face = "bold", color = "black"),
+        axis.text  = element_text(size = 14, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 14),
+        legend.position = "none",
+        legend.text = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black"))
