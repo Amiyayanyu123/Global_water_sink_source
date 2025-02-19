@@ -1,223 +1,306 @@
-library(raster)
-library(xts)
-library(lubridate)
-library(ggstatsplot)
-library(rsq)
-library(extrafont)
-library(car)
-library(bfast)
-library(remotes)
-library(ggpmisc)
-library(dplyr)
-library(lubridate)
-library(mice)
-library(VIM)
+# Load necessary libraries
+library(raster)        # For handling raster data
+library(xts)           # For working with time series data
+library(lubridate)     # For date/time manipulation
+library(ggstatsplot)   # For enhanced ggplot2 statistical visualizations
+library(rsq)           # For calculating R-squared for various models
+library(extrafont)     # For using additional fonts in plots
+library(car)           # Companion to Applied Regression functions
+library(bfast)         # For detecting and characterizing abrupt changes in time series
+library(remotes)       # For installing packages from remote repositories
+library(ggpmisc)       # For adding equations and stats to ggplot2 plots
+library(dplyr)         # For data manipulation
+library(lubridate)     # (Repeated) For date/time manipulation
+library(mice)          # For multivariate imputation
+library(VIM)           # For visualizing and imputing missing values
 
+# -----------------------------------------------------------------------------
+# Process the "coeff_model1_ridge.tif" raster file for sensitivity analysis
+# -----------------------------------------------------------------------------
 setwd("F:\\Global_water_consumption\\Data\\period_total")
 
+# Read the sensitivity raster stack
 sensi <- stack("coeff_model1_ridge.tif") 
 
-multi_frame <-
-  as.data.frame(sensi , xy = TRUE) %>%
-  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+# Convert raster stack to data frame with x-y coordinates, remove NA values,
+# and round the x and y coordinates to three decimal places
+multi_frame <- as.data.frame(sensi, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
 
-multi_long = multi_frame %>% dplyr::select(pr_EI, tmean_EI, vpd_EI, srad_EI, gimms_ndvi_EI) %>% reshape2::melt()
+# Reshape selected columns from wide to long format for further analysis
+multi_long = multi_frame %>% 
+  dplyr::select(pr_EI, tmean_EI, vpd_EI, srad_EI, gimms_ndvi_EI) %>% 
+  reshape2::melt()
 
-se <- function(x, na.rm=FALSE) {
+# Define a function to compute standard error
+se <- function(x, na.rm = FALSE) {
   if (na.rm) x <- na.omit(x)
-  sqrt(var(x)/length(x))
+  sqrt(var(x) / length(x))
 }
 
-
+# Compute summary statistics for each variable
 statis_plot = multi_long %>% 
   group_by(variable) %>%
-  summarise(median = median(value, na.rm = TRUE),
-            mean = mean(value, na.rm = TRUE),
-            Q25 = quantile(value,probs = 0.25, na.rm = TRUE),
-            Q75 = quantile(value,probs = 0.75, na.rm = TRUE),
-            se = se(value,na.rm = T)) 
+  summarise(
+    median = median(value, na.rm = TRUE),
+    mean = mean(value, na.rm = TRUE),
+    Q25 = quantile(value, probs = 0.25, na.rm = TRUE),
+    Q75 = quantile(value, probs = 0.75, na.rm = TRUE),
+    se = se(value, na.rm = TRUE)
+  ) 
 
-ggplot(data = statis_plot,aes(x= variable, y=mean))+ 
-  geom_bar(position="stack", stat="identity",color = "grey",fill = NA,size = 1)+
-  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75), width=0,size=1,color = "grey", 
-                position=position_dodge(0.3))+
-  geom_point(data = statis_plot,aes(x= variable, y= median),position=position_dodge(0.3),size=4,color = "grey")+
-  labs(x="Variable", y = "Sensitivity") +geom_text(aes(label = round(mean,digits = 2)),size = 5,hjust = 0.5, nudge_x = 0.2)+
-  theme(axis.title=element_text(size=14,face="bold",color="black"),
-        axis.text = element_text(size=14,face="plain",color="black"),
-        panel.background=element_rect(colour="black",fill=NA),
-        panel.grid.minor=element_blank(),
-        text=element_text(size=14),
-        legend.position="none",
-        legend.text = element_text(size=14
-        ),legend.background=element_rect(colour=NA,fill=NA),
-        axis.ticks=element_line(colour="black"))
+# Create a bar plot with error bars for sensitivity values
+ggplot(data = statis_plot, aes(x = variable, y = mean)) + 
+  geom_bar(position = "stack", stat = "identity", color = "grey", fill = NA, size = 1) +
+  geom_errorbar(aes(y = median, ymin = Q25, ymax = Q75), width = 0, size = 1, color = "grey",
+                position = position_dodge(0.3)) +
+  geom_point(aes(y = median), position = position_dodge(0.3), size = 4, color = "grey") +
+  labs(x = "Variable", y = "Sensitivity") +
+  geom_text(aes(label = round(mean, digits = 2)), size = 5, hjust = 0.5, nudge_x = 0.2) +
+  theme(
+    axis.title = element_text(size = 14, face = "bold", color = "black"),
+    axis.text = element_text(size = 14, face = "plain", color = "black"),
+    panel.background = element_rect(colour = "black", fill = NA),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 14),
+    legend.position = "none",
+    legend.text = element_text(size = 14),
+    legend.background = element_rect(colour = NA, fill = NA),
+    axis.ticks = element_line(colour = "black")
+  )
 
-######################################################################################################
+# -----------------------------------------------------------------------------
+# Process the "all_trend.tif" raster file for trend analysis (scaled by 10)
+# -----------------------------------------------------------------------------
 setwd("F:\\Global_water_consumption\\Data\\period_total")
 
+# Read the trend raster stack
 sensi <- stack("all_trend.tif") 
 
-multi_frame <-
-  as.data.frame(sensi , xy = TRUE) %>%
-  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+# Convert raster stack to data frame with x-y coordinates, remove NA values,
+# and round x-y coordinates to three decimals
+multi_frame <- as.data.frame(sensi, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
 
-multi_long = multi_frame %>% dplyr::select(trend_kndvi, trend_EI, trend_rs, trend_tmean, trend_pr, trend_vpd) %>% reshape2::melt()
+# Select relevant trend variables and reshape to long format
+multi_long = multi_frame %>% 
+  dplyr::select(trend_kndvi, trend_EI, trend_rs, trend_tmean, trend_pr, trend_vpd) %>% 
+  reshape2::melt()
 
-se <- function(x, na.rm=FALSE) {
+# (Re)define the standard error function (if not already defined)
+se <- function(x, na.rm = FALSE) {
   if (na.rm) x <- na.omit(x)
-  sqrt(var(x)/length(x))
+  sqrt(var(x) / length(x))
 }
 
-
+# Compute summary statistics for each trend variable and multiply by 10
 statis_plot = multi_long %>% 
   group_by(variable) %>%
-  summarise(median = median(value, na.rm = TRUE)*10,
-            mean = mean(value, na.rm = TRUE)*10,
-            Q25 = quantile(value,probs = 0.25, na.rm = TRUE)*10,
-            Q75 = quantile(value,probs = 0.75, na.rm = TRUE)*10,
-            se = se(value,na.rm = T)*10) 
+  summarise(
+    median = median(value, na.rm = TRUE) * 10,
+    mean = mean(value, na.rm = TRUE) * 10,
+    Q25 = quantile(value, probs = 0.25, na.rm = TRUE) * 10,
+    Q75 = quantile(value, probs = 0.75, na.rm = TRUE) * 10,
+    se = se(value, na.rm = TRUE) * 10
+  ) 
 
-ggplot(data = statis_plot,aes(x= variable, y=mean))+ 
-  geom_bar(position="stack", stat="identity",color = "grey",fill = NA,size = 1)+
-  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75), width=0,size=1,color = "grey", 
-                position=position_dodge(0.3))+
-  geom_point(data = statis_plot,aes(x= variable, y= median),position=position_dodge(0.3),size=4,color = "grey")+
-  labs(x="Variable", y = "Trend") +geom_text(aes(label = round(mean,digits = 3)),size = 5,hjust = 0.5, nudge_x = 0.2)+
-  theme(axis.title=element_text(size=14,face="bold",color="black"),
-        axis.text = element_text(size=14,face="plain",color="black"),
-        panel.background=element_rect(colour="black",fill=NA),
-        panel.grid.minor=element_blank(),
-        text=element_text(size=14),
-        legend.position="none",
-        legend.text = element_text(size=14
-        ),legend.background=element_rect(colour=NA,fill=NA),
-        axis.ticks=element_line(colour="black"))
-######################################################################################################
+# Create a bar plot with error bars for trend values
+ggplot(data = statis_plot, aes(x = variable, y = mean)) + 
+  geom_bar(position = "stack", stat = "identity", color = "grey", fill = NA, size = 1) +
+  geom_errorbar(aes(y = median, ymin = Q25, ymax = Q75), width = 0, size = 1, color = "grey",
+                position = position_dodge(0.3)) +
+  geom_point(aes(y = median), position = position_dodge(0.3), size = 4, color = "grey") +
+  labs(x = "Variable", y = "Trend") +
+  geom_text(aes(label = round(mean, digits = 3)), size = 5, hjust = 0.5, nudge_x = 0.2) +
+  theme(
+    axis.title = element_text(size = 14, face = "bold", color = "black"),
+    axis.text = element_text(size = 14, face = "plain", color = "black"),
+    panel.background = element_rect(colour = "black", fill = NA),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 14),
+    legend.position = "none",
+    legend.text = element_text(size = 14),
+    legend.background = element_rect(colour = NA, fill = NA),
+    axis.ticks = element_line(colour = "black")
+  )
+
+# -----------------------------------------------------------------------------
+# Process the "trend_var_EI.tif" raster file for trend analysis by variable (scaled by 10)
+# -----------------------------------------------------------------------------
 setwd("F:\\Global_water_consumption\\Data\\period_total")
 
+# Read the trend raster stack for variables affecting EI
 sensi <- stack("trend_var_EI.tif") 
 
-multi_frame <-
-  as.data.frame(sensi , xy = TRUE) %>%
-  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
+# Convert raster stack to data frame with x-y coordinates, remove NA values,
+# and round x-y coordinates to three decimals
+multi_frame <- as.data.frame(sensi, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
 
-multi_long = multi_frame %>% dplyr::select(trend_kndvi, trend_pr, trend_tmean, trend_vpd, trend_rs) %>% reshape2::melt()
+# Reshape selected trend variables to long format
+multi_long = multi_frame %>% 
+  dplyr::select(trend_kndvi, trend_pr, trend_tmean, trend_vpd, trend_rs) %>% 
+  reshape2::melt()
 
-se <- function(x, na.rm=FALSE) {
+# (Re)define standard error function if needed
+se <- function(x, na.rm = FALSE) {
   if (na.rm) x <- na.omit(x)
-  sqrt(var(x)/length(x))
+  sqrt(var(x) / length(x))
 }
 
-
+# Compute summary statistics for each variable trend, scaled by 10
 statis_plot = multi_long %>% 
   group_by(variable) %>%
-  summarise(median = median(value, na.rm = TRUE)*10,
-            mean = mean(value, na.rm = TRUE)*10,
-            Q25 = quantile(value,probs = 0.25, na.rm = TRUE)*10,
-            Q75 = quantile(value,probs = 0.75, na.rm = TRUE)*10,
-            se = se(value,na.rm = T)*10) 
+  summarise(
+    median = median(value, na.rm = TRUE) * 10,
+    mean = mean(value, na.rm = TRUE) * 10,
+    Q25 = quantile(value, probs = 0.25, na.rm = TRUE) * 10,
+    Q75 = quantile(value, probs = 0.75, na.rm = TRUE) * 10,
+    se = se(value, na.rm = TRUE) * 10
+  ) 
 
-ggplot(data = statis_plot,aes(x= variable, y=mean))+ 
-  geom_bar(position="stack", stat="identity",color = "grey",fill = NA,size = 1)+
-  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75), width=0,size=1,color = "grey", 
-                position=position_dodge(0.3))+
-  geom_point(data = statis_plot,aes(x= variable, y= median),position=position_dodge(0.3),size=4,color = "grey")+
-  labs(x="Variable", y = "Trend_by_variable") +geom_text(aes(label = round(mean,digits = 3)),size = 5,hjust = 0.5, nudge_x = 0.2)+
-  theme(axis.title=element_text(size=14,face="bold",color="black"),
-        axis.text = element_text(size=14,face="plain",color="black"),
-        panel.background=element_rect(colour="black",fill=NA),
-        panel.grid.minor=element_blank(),
-        text=element_text(size=14),
-        legend.position="none",
-        legend.text = element_text(size=14
-        ),legend.background=element_rect(colour=NA,fill=NA),
-        axis.ticks=element_line(colour="black"))
-######################################################################################################
+# Create a bar plot with error bars for trend-by-variable
+ggplot(data = statis_plot, aes(x = variable, y = mean)) + 
+  geom_bar(position = "stack", stat = "identity", color = "grey", fill = NA, size = 1) +
+  geom_errorbar(aes(y = median, ymin = Q25, ymax = Q75), width = 0, size = 1, color = "grey",
+                position = position_dodge(0.3)) +
+  geom_point(aes(y = median), position = position_dodge(0.3), size = 4, color = "grey") +
+  labs(x = "Variable", y = "Trend_by_variable") +
+  geom_text(aes(label = round(mean, digits = 3)), size = 5, hjust = 0.5, nudge_x = 0.2) +
+  theme(
+    axis.title = element_text(size = 14, face = "bold", color = "black"),
+    axis.text = element_text(size = 14, face = "plain", color = "black"),
+    panel.background = element_rect(colour = "black", fill = NA),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 14),
+    legend.position = "none",
+    legend.text = element_text(size = 14),
+    legend.background = element_rect(colour = NA, fill = NA),
+    axis.ticks = element_line(colour = "black")
+  )
+
+# -----------------------------------------------------------------------------
+# Analyze trends from climate and vegetation rasters
+# -----------------------------------------------------------------------------
 setwd("F:\\Global_water_consumption\\Data\\period_total")
 
+# Read the climate trend raster stack
 cli <- stack("trend_var_climate.tif")
+# Read the vegetation trend raster stack (NDVI-based EI)
 vege <- stack("trend_ndvi_EI.tif")
 
-multi_frame <-
-  as.data.frame(cli , xy = TRUE) %>%
-  na.omit() %>% mutate(across(c(x, y), round, digits = 3))
+# Convert climate raster to data frame and clean data
+multi_frame <- as.data.frame(cli, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3))
 
-multi_frame$vege = extract(vege ,multi_frame[,1:2])
-multi_frame$cli =  multi_frame$trend_pr
+# Extract vegetation trend values based on coordinates from the climate data frame
+multi_frame$vege = extract(vege, multi_frame[, 1:2])
+# Use the climate trend variable (e.g., trend_pr) for further analysis
+multi_frame$cli = multi_frame$trend_pr
 
-multi_long = multi_frame %>% dplyr::select(cli,vege) %>% reshape2::melt()
+# Reshape the climate and vegetation data to long format
+multi_long = multi_frame %>% 
+  dplyr::select(cli, vege) %>% 
+  reshape2::melt()
 
-se <- function(x, na.rm=FALSE) {
+# (Re)define the standard error function if needed
+se <- function(x, na.rm = FALSE) {
   if (na.rm) x <- na.omit(x)
-  sqrt(var(x)/length(x))
+  sqrt(var(x) / length(x))
 }
 
-
+# Compute summary statistics for climate and vegetation trends, scaled by 10
 statis_plot = multi_long %>%
   group_by(variable) %>%
-  summarise(median = median(value, na.rm = TRUE)*10,
-            mean = mean(value, na.rm = TRUE)*10,
-            Q25 = quantile(value,probs = 0.25, na.rm = TRUE)*10,
-            Q75 = quantile(value,probs = 0.75, na.rm = TRUE)*10,
-            se = se(value,na.rm = T)*10)
+  summarise(
+    median = median(value, na.rm = TRUE) * 10,
+    mean = mean(value, na.rm = TRUE) * 10,
+    Q25 = quantile(value, probs = 0.25, na.rm = TRUE) * 10,
+    Q75 = quantile(value, probs = 0.75, na.rm = TRUE) * 10,
+    se = se(value, na.rm = TRUE) * 10
+  )
 
-ggplot(data = statis_plot,aes(x= variable, y=mean,fill = variable))+ 
-  geom_bar(position="stack", stat="identity",color = "grey",size = 1)+
-  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75), width=0,size=1,color = "grey", 
-                position=position_dodge(0.3))+
-  geom_point(data = statis_plot,aes(x= variable, y= median),position=position_dodge(0.3),size=4,color = "grey")+
-  labs(x="Variable", y = "Trend_by_variable") +geom_text(aes(label = round(mean,digits = 3)),size = 5,hjust = 0.5, nudge_x = 0.2)+
-  theme(axis.title=element_text(size=14,face="bold",color="black"),
-        axis.text = element_text(size=14,face="plain",color="black"),
-        panel.background=element_rect(colour="black",fill=NA),
-        panel.grid.minor=element_blank(),
-        text=element_text(size=14),
-        legend.position="none",
-        legend.text = element_text(size=14
-        ),legend.background=element_rect(colour=NA,fill=NA),
-        axis.ticks=element_line(colour="black"))
+# Create a bar plot with error bars for climate vs. vegetation trends
+ggplot(data = statis_plot, aes(x = variable, y = mean, fill = variable)) + 
+  geom_bar(position = "stack", stat = "identity", color = "grey", size = 1) +
+  geom_errorbar(aes(y = median, ymin = Q25, ymax = Q75), width = 0, size = 1, color = "grey",
+                position = position_dodge(0.3)) +
+  geom_point(aes(y = median), position = position_dodge(0.3), size = 4, color = "grey") +
+  labs(x = "Variable", y = "Trend_by_variable") +
+  geom_text(aes(label = round(mean, digits = 3)), size = 5, hjust = 0.5, nudge_x = 0.2) +
+  theme(
+    axis.title = element_text(size = 14, face = "bold", color = "black"),
+    axis.text = element_text(size = 14, face = "plain", color = "black"),
+    panel.background = element_rect(colour = "black", fill = NA),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 14),
+    legend.position = "none",
+    legend.text = element_text(size = 14),
+    legend.background = element_rect(colour = NA, fill = NA),
+    axis.ticks = element_line(colour = "black")
+  )
 
-######################################################################################################
+# -----------------------------------------------------------------------------
+# Analyze the relative contributions of climate and vegetation using ratio rasters
+# -----------------------------------------------------------------------------
 setwd("F:\\Global_water_consumption\\Data\\period_total")
 
+# Read the climate ratio and vegetation ratio raster stacks
 cli <- stack("climate_ratio.tif") 
 vege <- stack("kndvi_ratio.tif") 
 
-multi_frame <-
-  as.data.frame(cli , xy = TRUE) %>%
-  na.omit() %>% mutate(across(c(x, y), round, digits = 3)) 
-multi_frame$vege = extract(vege ,multi_frame[,1:2])
-multi_frame$cli =  multi_frame$climate_ratio
+# Convert the climate ratio raster to data frame and clean data
+multi_frame <- as.data.frame(cli, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
 
-multi_long = multi_frame %>% dplyr::select(cli,vege) %>% reshape2::melt()
+# Extract vegetation ratio values based on coordinates
+multi_frame$vege = extract(vege, multi_frame[, 1:2])
+# Use the climate ratio variable directly from the data
+multi_frame$cli = multi_frame$climate_ratio
 
-se <- function(x, na.rm=FALSE) {
+# Reshape the climate and vegetation ratio data to long format
+multi_long = multi_frame %>% 
+  dplyr::select(cli, vege) %>% 
+  reshape2::melt()
+
+# (Re)define the standard error function if needed
+se <- function(x, na.rm = FALSE) {
   if (na.rm) x <- na.omit(x)
-  sqrt(var(x)/length(x))
+  sqrt(var(x) / length(x))
 }
 
-
+# Compute summary statistics for the contributions (as percentages)
 statis_plot = multi_long %>% 
   group_by(variable) %>%
-  summarise(median = median(value, na.rm = TRUE)*100,
-            mean = mean(value, na.rm = TRUE)*100,
-            Q25 = quantile(value,probs = 0.25, na.rm = TRUE)*100,
-            Q75 = quantile(value,probs = 0.75, na.rm = TRUE)*100,
-            se = se(value,na.rm = T)*100) 
+  summarise(
+    median = median(value, na.rm = TRUE) * 100,
+    mean = mean(value, na.rm = TRUE) * 100,
+    Q25 = quantile(value, probs = 0.25, na.rm = TRUE) * 100,
+    Q75 = quantile(value, probs = 0.75, na.rm = TRUE) * 100,
+    se = se(value, na.rm = TRUE) * 100
+  ) 
 
-ggplot(data = statis_plot,aes(x= variable, y=mean,fill=variable))+ 
-  geom_bar(position="stack", stat="identity",color = "grey",size = 1)+
-  geom_errorbar(data = statis_plot,aes(x= variable, y= median, ymin=Q25, ymax=Q75), width=0,size=1,color = "grey", 
-                position=position_dodge(0.3))+
-  geom_point(data = statis_plot,aes(x= variable, y= median),position=position_dodge(0.3),size=4,color = "grey")+
-  labs(x="Variable", y = "Contribution") +geom_text(aes(label = round(mean,digits = 0)),size = 5,hjust = 0.5, nudge_x = 0.2)+
-  theme(axis.title=element_text(size=14,face="bold",color="black"),
-        axis.text = element_text(size=14,face="plain",color="black"),
-        panel.background=element_rect(colour="black",fill=NA),
-        panel.grid.minor=element_blank(),
-        text=element_text(size=14),
-        legend.position="none",
-        legend.text = element_text(size=14
-        ),legend.background=element_rect(colour=NA,fill=NA),
-        axis.ticks=element_line(colour="black"))
+# Create a bar plot with error bars for the contributions
+ggplot(data = statis_plot, aes(x = variable, y = mean, fill = variable)) + 
+  geom_bar(position = "stack", stat = "identity", color = "grey", size = 1) +
+  geom_errorbar(aes(y = median, ymin = Q25, ymax = Q75), width = 0, size = 1, color = "grey",
+                position = position_dodge(0.3)) +
+  geom_point(aes(y = median), position = position_dodge(0.3), size = 4, color = "grey") +
+  labs(x = "Variable", y = "Contribution") +
+  geom_text(aes(label = round(mean, digits = 0)), size = 5, hjust = 0.5, nudge_x = 0.2) +
+  theme(
+    axis.title = element_text(size = 14, face = "bold", color = "black"),
+    axis.text = element_text(size = 14, face = "plain", color = "black"),
+    panel.background = element_rect(colour = "black", fill = NA),
+    panel.grid.minor = element_blank(),
+    text = element_text(size = 14),
+    legend.position = "none",
+    legend.text = element_text(size = 14),
+    legend.background = element_rect(colour = NA, fill = NA),
+    axis.ticks = element_line(colour = "black")
+  )
