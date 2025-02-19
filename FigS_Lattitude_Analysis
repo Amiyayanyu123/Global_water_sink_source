@@ -1,0 +1,73 @@
+# =============================================================================
+# SECTION 1: Compare Indirect-Direct Ratio Sensitivity by Longitude
+# =============================================================================
+library(raster)         # For raster data manipulation
+library(xts)            # For time series handling
+library(lubridate)      # For date/time operations
+library(ggstatsplot)    # For advanced statistical plotting
+library(rsq)            # For calculating R-squared values
+library(extrafont)      # For additional font support in plots
+library(car)            # Companion to Applied Regression functions
+library(bfast)          # For breakpoint detection in time series
+library(remotes)        # For installing remote packages
+library(ggpmisc)        # For adding equations/statistics to ggplots
+library(dplyr)          # For data manipulation
+library(lubridate)      # (Duplicate; can be removed)
+library(mice)           # For imputing missing data
+library(VIM)            # For visualizing missing data
+
+# Set working directory for figure A-B output
+setwd("F:\\Global_water_sink_source\\Figures\\A_B")
+# Load the multiband TIFF raster containing the difference between indirect and direct ratio
+multiband_tif <- stack("diff_indirect_direct_ratio.tif")
+
+# Convert the multiband raster to a data frame with x-y coordinates.
+# Remove NA rows and round coordinates to 0 decimals.
+multi_frame <-
+  as.data.frame(multiband_tif, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 0))
+
+# Reshape the data frame from wide to long format.
+multi_long = multi_frame %>% reshape2::melt(id = c("x", "y"))
+
+# Compute summary statistics grouped by longitude (y) and variable:
+# median, 75th percentile, and 25th percentile.
+statis_plot = multi_long %>% 
+  group_by(y, variable) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            Q75    = quantile(value, probs = 0.75, na.rm = TRUE),
+            Q25    = quantile(value, probs = 0.25, na.rm = TRUE))
+
+# Plot the summary statistics:
+# The plot shows a ribbon (Q25-Q75) and a line (median) by longitude.
+ggplot(statis_plot, aes(x = y, y = median)) + 
+  geom_ribbon(aes(ymin = Q25, ymax = Q75), alpha = 0.3) +
+  coord_flip() +
+  geom_line(size = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  labs(x = "Longitude", y = "Sensitivity") +
+  scale_y_continuous(breaks = seq(-0.8, 0.8, 0.4)) +
+  theme(axis.title   = element_text(size = 20, face = "bold", color = "black"),
+        axis.text    = element_text(size = 18, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 18),
+        legend.position = "bottom",
+        legend.text  = element_text(size = 18),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# =============================================================================
+# SECTION 2: Compare Sensitivity (KNDVI) between 1982 and 2000
+# =============================================================================
+# Set working directory for sensitivity data (scale 10000)
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+# Load the sensitivity raster for 1982 and 2000
+sensi_1982 <- stack("coeff_model1_kndvi_EI.tif")
+sensi_2000 <- stack("coeff_model2_kndvi_EI.tif")
+
+# Convert the 1982 raster to a data frame with coordinates and round to 3 decimals.
+multi_frame <-
+  as.data.frame(sensi_1982, xy = TRUE) %>%
+  na.omit() %
