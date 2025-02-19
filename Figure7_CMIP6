@@ -1,0 +1,667 @@
+# Load required libraries for raster processing, date handling, and tidy data manipulation
+library(raster)       # For raster data manipulation
+library(lubridate)    # For date/time functions (loaded twice; can remove duplicate)
+library(tidyverse)    # For data manipulation and plotting (includes dplyr, ggplot2, etc.)
+
+# ----------------------------
+# PROCESS COEFFICIENTS (Sensitivity) DATA FOR SSP245 AND SSP585
+# ----------------------------
+
+# Set working directory to the folder containing the comparison files
+setwd("H:\\Water_sink_source\\2015_2100_compare")
+
+# Read the sensitivity raster (coefficient) for SSP245 scenario
+sensi1 <- stack("coeff_model1_SSP245.tif") 
+
+# Convert the raster stack to a data frame with xy coordinates; remove NA rows and round coordinates
+multi_frame1 <-
+  as.data.frame(sensi1, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
+
+# Select desired columns, reshape the data from wide to long format, and add a new column "Time" indicating scenario
+multi_long1 = multi_frame1 %>% 
+  dplyr::select(Pr_EI, Temp_EI, VPD_EI, Rs_EI, LAI_EI) %>% 
+  reshape2::melt() %>%
+  transform(Time = "SSP245")
+
+# Read the sensitivity raster for SSP585 scenario
+sensi2 <- stack("coeff_model1_SSP585.tif") 
+
+# Convert the raster stack to a data frame; remove NA rows and round coordinates
+multi_frame2 <-
+  as.data.frame(sensi2, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
+
+# Reshape the selected columns and add a "Time" indicator for SSP585
+multi_long2 = multi_frame2 %>% 
+  dplyr::select(Pr_EI, Temp_EI, VPD_EI, Rs_EI, LAI_EI) %>% 
+  reshape2::melt() %>%
+  transform(Time = "SSP2585")  # Note: "SSP2585" appears to be a typo; check if you meant "SSP585"
+
+# Combine the two scenario datasets into one
+multi_long = rbind(multi_long1, multi_long2)
+
+# Define a function to calculate the standard error (SE)
+se <- function(x, na.rm = FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x) / length(x))
+}
+
+# Calculate summary statistics (median, mean, 25th and 75th percentiles, SE) grouped by variable and Time
+statis_plot = multi_long %>% 
+  group_by(variable, Time) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            mean = mean(value, na.rm = TRUE),
+            Q25 = quantile(value, probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(value, probs = 0.75, na.rm = TRUE),
+            se = se(value, na.rm = TRUE))
+
+# Create a ggplot of sensitivity (median values) with error bars for each variable by scenario
+ggplot(data = statis_plot, aes(x = variable, y = median, color = Time)) + 
+  geom_errorbar(aes(ymin = Q25, ymax = Q75, color = Time),
+                width = 0, size = 1, position = position_dodge(0.8)) +
+  scale_color_manual(values = c("#FFBE7A", "#FA7F6F")) +
+  geom_point(aes(fill = Time), position = position_dodge(0.8), size = 4) +
+  labs(x = "Variable", y = "Sensitivity") +
+  theme(axis.title = element_text(size = 14, face = "bold", color = "black"),
+        axis.text  = element_text(size = 14, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 14),
+        legend.position = "none",
+        legend.text = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black")) +
+  facet_wrap(~ variable, ncol = 5, scales = "free")
+
+# ----------------------------
+# PROCESS ALL TREND DATA FOR SSP245 AND SSP585
+# ----------------------------
+
+# Read the trend raster for SSP245 scenario
+sensi1 <- stack("all_trend_SSP245.tif") 
+
+# Convert to data frame, remove NA, and round coordinates
+multi_frame1 <-
+  as.data.frame(sensi1, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
+
+# Select trend variables, reshape to long format, and add a "Time" column
+multi_long1 = multi_frame1 %>% 
+  dplyr::select(trend_lai, trend_EI, trend_rs, trend_tmean, trend_pr, trend_vpd) %>% 
+  reshape2::melt() %>%
+  transform(Time = "SSP245")
+
+# Read the trend raster for SSP585 scenario
+sensi2 <- stack("all_trend_SSP585.tif") 
+
+# Process the raster as above for SSP585
+multi_frame2 <-
+  as.data.frame(sensi2, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
+
+# Reshape and add Time indicator for SSP585
+multi_long2 = multi_frame2 %>% 
+  dplyr::select(trend_lai, trend_EI, trend_rs, trend_tmean, trend_pr, trend_vpd) %>% 
+  reshape2::melt() %>%
+  transform(Time = "SSP585")
+
+# Combine the trend data for both scenarios
+multi_long = rbind(multi_long1, multi_long2)
+
+# Reuse the standard error function 'se'
+se <- function(x, na.rm = FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x) / length(x))
+}
+
+# Compute summary statistics for trend data (no scaling applied here)
+statis_plot = multi_long %>% 
+  group_by(variable, Time) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            mean = mean(value, na.rm = TRUE),
+            Q25 = quantile(value, probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(value, probs = 0.75, na.rm = TRUE),
+            se = se(value, na.rm = TRUE))
+
+# Plot trend data (median) with error bars for each variable by scenario
+ggplot(data = statis_plot, aes(x = variable, y = median, color = Time)) + 
+  geom_errorbar(aes(ymin = Q25, ymax = Q75, color = Time),
+                width = 0, size = 1, position = position_dodge(0.8)) +
+  scale_color_manual(values = c("#FFBE7A", "#FA7F6F")) +
+  geom_point(aes(fill = Time), position = position_dodge(0.8), size = 4) +
+  labs(x = "Variable", y = "Sensitivity") +
+  theme(axis.title = element_text(size = 14, face = "bold", color = "black"),
+        axis.text  = element_text(size = 14, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 14),
+        legend.position = "none",
+        legend.text = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black")) +
+  facet_wrap(~ variable, ncol = 6, scales = "free")
+
+# ----------------------------
+# PROCESS TREND BY VARIABLE (For EI) FOR SSP245 AND SSP585
+# ----------------------------
+
+# Read the raster for variable-specific trend (for EI) for SSP245
+sensi1 <- stack("trend_var_EI_SSP245.tif") 
+
+# Convert raster to data frame and clean
+multi_frame1 <-
+  as.data.frame(sensi1, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
+
+# Reshape selected trend variables and tag with "Time" = SSP245
+multi_long1 = multi_frame1 %>% 
+  dplyr::select(trend_lai, trend_pr, trend_tmean, trend_vpd, trend_rs) %>% 
+  reshape2::melt() %>%
+  transform(Time = "SSP245")
+
+# Read the raster for variable-specific trend for SSP585
+sensi2 <- stack("trend_var_EI_SSP585.tif") 
+
+# Process raster similarly for SSP585
+multi_frame2 <-
+  as.data.frame(sensi2, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
+
+# Reshape and add scenario tag
+multi_long2 = multi_frame2 %>% 
+  dplyr::select(trend_lai, trend_pr, trend_tmean, trend_vpd, trend_rs) %>% 
+  reshape2::melt() %>%
+  transform(Time = "SSP585")
+
+# Combine both scenarios
+multi_long = rbind(multi_long1, multi_long2)
+
+# Compute summary statistics and scale values by 100 (percentage scale)
+statis_plot = multi_long %>% 
+  group_by(variable, Time) %>%
+  summarise(median = median(value, na.rm = TRUE) * 100,
+            mean = mean(value, na.rm = TRUE) * 100,
+            Q25 = quantile(value, probs = 0.25, na.rm = TRUE) * 100,
+            Q75 = quantile(value, probs = 0.75, na.rm = TRUE) * 100,
+            se = se(value, na.rm = TRUE) * 100)
+
+# Create a bar plot with error bars for variable-specific trends
+ggplot(data = statis_plot, aes(x = variable, y = mean, color = Time)) + 
+  geom_bar(aes(y = mean, color = Time), position = position_dodge(0.8), 
+           stat = "identity", fill = NA, width = 0.8) +
+  geom_errorbar(aes(y = median, ymin = Q25, ymax = Q75, color = Time), 
+                width = 0, size = 1, position = position_dodge(0.8)) +
+  scale_color_manual(values = c("#FFBE7A", "#FA7F6F")) +
+  geom_point(aes(fill = Time), position = position_dodge(0.8), size = 4) +
+  labs(x = "Variable", y = "Trend by variable") +
+  geom_text(aes(label = round(mean, digits = 2)), size = 5, hjust = 0.5, 
+            nudge_x = 0.4, nudge_y = 0.1) +
+  theme(axis.title = element_text(size = 14, face = "bold", color = "black"),
+        axis.text  = element_text(size = 14, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 14),
+        legend.position = "none",
+        legend.text = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black"))
+
+# ----------------------------
+# PROCESS RATIO DATA (Contribution: Vegetation vs. Climate) FOR SSP245 AND SSP585
+# ----------------------------
+
+# Read the ratio raster for SSP245
+sensi1 <- stack("all_ratio_SSP245.tif") 
+
+# Convert raster to data frame and clean data
+multi_frame1 <-
+  as.data.frame(sensi1, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
+
+# Select the vegetation and climate ratio variables and add scenario tag
+multi_long1 = multi_frame1 %>% 
+  dplyr::select(vege_ratio, climate_ratio) %>% 
+  reshape2::melt() %>%
+  transform(Time = "SSP245")
+
+# Read the ratio raster for SSP585
+sensi2 <- stack("all_ratio_SSP585.tif") 
+
+# Process the raster similarly for SSP585
+multi_frame2 <-
+  as.data.frame(sensi2, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
+
+# Reshape and add scenario tag for SSP585
+multi_long2 = multi_frame2 %>% 
+  dplyr::select(vege_ratio, climate_ratio) %>% 
+  reshape2::melt() %>%
+  transform(Time = "SSP585")
+
+# Combine ratio data for both scenarios
+multi_long = rbind(multi_long1, multi_long2)
+
+# Compute summary statistics (converted to percentages) for the ratio data
+statis_plot = multi_long %>% 
+  group_by(variable, Time) %>%
+  summarise(median = median(value, na.rm = TRUE) * 100,
+            mean = mean(value, na.rm = TRUE) * 100,
+            Q25 = quantile(value, probs = 0.25, na.rm = TRUE) * 100,
+            Q75 = quantile(value, probs = 0.75, na.rm = TRUE) * 100,
+            se = se(value, na.rm = TRUE) * 100)
+
+# Plot the contribution ratios with error bars
+ggplot(data = statis_plot, aes(x = variable, y = mean, color = Time)) + 
+  geom_bar(aes(y = mean, color = Time), position = position_dodge(0.8),
+           stat = "identity", fill = NA, width = 0.8) +
+  geom_errorbar(aes(y = median, ymin = Q25, ymax = Q75, color = Time),
+                width = 0, size = 1, position = position_dodge(0.8)) +
+  scale_color_manual(values = c("#FFBE7A", "#FA7F6F")) +
+  geom_point(aes(fill = Time), position = position_dodge(0.8), size = 4) +
+  labs(x = "Variable", y = "Trend by variable") +
+  geom_text(aes(label = round(mean, digits = 2)), size = 5, hjust = 0.5,
+            nudge_x = 0.4, nudge_y = 0.1) +
+  theme(axis.title = element_text(size = 14, face = "bold", color = "black"),
+        axis.text  = element_text(size = 14, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 14),
+        legend.position = "none",
+        legend.text = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black"))
+
+# ----------------------------
+# PROCESS TOTAL TREND EFFECTS FOR SSP245 AND SSP585
+# ----------------------------
+
+# Read the total trend effect raster for SSP245
+sensi1 <- stack("trend_var_total_1SSP245.tif") 
+
+# Convert to data frame and remove NA rows; round x-y coordinates
+multi_frame1 <-
+  as.data.frame(sensi1, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
+
+# Select variables (vegetation and climate effects) and reshape data
+multi_long1 = multi_frame1 %>% 
+  dplyr::select(vege, climate) %>% 
+  reshape2::melt() 
+
+# Read the total trend effect raster for SSP585
+sensi2 <- stack("SSP585_all_effects.tif") 
+
+# Process similarly for SSP585
+multi_frame2 <-
+  as.data.frame(sensi2, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3)) 
+
+# Reshape the SSP585 data
+multi_long2 = multi_frame2 %>% 
+  dplyr::select(SSP585_all_effects) %>% 
+  reshape2::melt() 
+
+# Combine the total effect data from both scenarios
+multi_long = rbind(multi_long1, multi_long2)
+
+# Compute summary statistics (scaled to percentage) for the total effects
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(median = median(value, na.rm = TRUE) * 100,
+            mean = mean(value, na.rm = TRUE) * 100,
+            Q25 = quantile(value, probs = 0.25, na.rm = TRUE) * 100,
+            Q75 = quantile(value, probs = 0.75, na.rm = TRUE) * 100,
+            se = se(value, na.rm = TRUE) * 100)
+
+# Plot the total trend effects with error bars and facet by variable
+ggplot(data = statis_plot, aes(x = variable, y = median)) + 
+  geom_errorbar(aes(ymin = Q25, ymax = Q75), width = 0, size = 1,
+                position = position_dodge(0.8)) +
+  scale_color_manual(values = c("#FA7F6F")) +
+  geom_point(position = position_dodge(0.8), size = 4) +
+  labs(x = "Variable", y = "Trend by variable") +
+  theme(axis.title = element_text(size = 14, face = "bold", color = "black"),
+        axis.text  = element_text(size = 14, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 14),
+        legend.position = "none",
+        legend.text = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black")) +
+  facet_wrap(~ variable, ncol = 5, scales = "free")
+
+# ----------------------------
+# PROCESS ADDITIONAL COMBINED DATA FOR MULTIVARIATE ANALYSIS
+# ----------------------------
+
+# Load additional libraries for time series and plotting
+library(xts)
+library(ggpubr)
+library(ggpmisc)
+
+# Set working directory for the combined analysis files
+setwd("H:\\Water_sink_source\\2015_2100_compare")
+
+# Read various raster layers for ratio, effect, sensitivity, AI, LAI and trend
+
+# Ratio: vegetation ratio from SSP585
+ratio <- stack("all_ratio_SSP585.tif")
+ratio = ratio$vege_ratio
+
+# Effect: vegetation effect from trend raster SSP585
+effect <- stack("trend_var_total_1SSP585.tif")
+effect = effect$vege
+
+# Sensitivity: LAI sensitivity from SSP585 coefficients
+sensi <- stack("coeff_model1_SSP585.tif")
+sensi = sensi$LAI_EI
+
+# AI: Aridity Index from Terra (1982-2019)
+AI <- stack("AI_Terra_1982_2019.tif")
+# LAI: Mean LAI for SSP585 scenario
+LAI <- stack("LAI_mean_SSP585.tif")
+
+# Trend: Overall trend raster; extract LAI trend
+trend <- stack("all_trend_SSP585.tif")
+LAI_trend = trend$trend_lai
+
+# Convert LAI raster to data frame, clean data and round coordinates
+multi_frame <-
+  as.data.frame(LAI, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3))
+
+# Extract corresponding values from other rasters at the xy locations
+multi_frame$sensi    = raster::extract(sensi, multi_frame[, 1:2])
+multi_frame$DI       = raster::extract(AI, multi_frame[, 1:2])
+multi_frame$ratio    = raster::extract(ratio, multi_frame[, 1:2])
+multi_frame$effect   = raster::extract(effect, multi_frame[, 1:2])
+multi_frame$LAI_trend = raster::extract(LAI_trend, multi_frame[, 1:2])
+multi_frame = multi_frame %>% na.omit()
+
+# Rename columns for clarity
+colnames(multi_frame) = c("x", "y", "LAI", "sensi", "DI", "ratio", "effect", "LAI_trend")
+
+# Define standard error function (if not already defined)
+se <- function(x, na.rm = FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x) / length(x))
+}
+
+# ----------------------------
+# BINNING BY DI AND LAI: Analysis of Sensitivity vs. LAI and DI
+# ----------------------------
+
+# Group the data into bins based on DI (P/PET) and LAI values, then calculate the median sensitivity
+statis_plot = multi_frame %>% 
+  na.omit() %>%
+  mutate(bin_DI = cut(DI, breaks = c(seq(0, 2, by = 0.2), Inf))) %>% 
+  mutate(bin_LAI = cut(LAI, breaks = c(seq(0, 6, by = 0.5), Inf))) %>% 
+  group_by(bin_DI, bin_LAI) %>% 
+  summarise(median = median(sensi, na.rm = TRUE))  %>% 
+  filter(!bin_DI %in% c("(0,0.2]", "(2,Inf]") & 
+         !bin_LAI %in% c("(0,0.5]", "(6,Inf]")) %>% 
+  na.omit()
+
+# Create a heatmap (tile plot) showing median sensitivity across binned LAI and DI values
+ggplot(statis_plot, aes(x = bin_LAI, y = bin_DI, fill = median)) + 
+  geom_tile() +
+  scale_fill_distiller(palette = "Spectral", limits = c(0, 0.35)) +
+  labs(x = "LAI", y = "P/PET") +
+  theme(axis.title = element_text(size = 14, face = "bold", color = "black"),
+        axis.text  = element_text(size = 14, face = "plain", color = "black"),
+        axis.text.x = element_text(size = 14, angle = 60),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 14),
+        legend.position = "right",
+        legend.text = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black"))
+
+# ----------------------------
+# BINNING BY LAI: Analysis of Sensitivity vs. LAI
+# ----------------------------
+
+# Group data by LAI bins and calculate median and quantiles for sensitivity; filter out the lowest bin
+statis_plot = multi_frame %>% 
+  na.omit() %>%
+  mutate(bin_LAI = cut(LAI, breaks = c(seq(0, 6, by = 0.5), Inf))) %>% 
+  group_by(bin_LAI) %>% 
+  summarise(median = median(sensi, na.rm = TRUE),
+            Q25 = quantile(sensi, probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(sensi, probs = 0.75, na.rm = TRUE)) %>% 
+  filter(!bin_LAI %in% c("(0,0.5]")) %>% 
+  na.omit() %>% 
+  transform(LAI = seq(0.25, 5.75, by = 0.5))
+
+# Define the equation format string for displaying model equation and R² on the plot
+eq_fmt <- "`y`~`=`~%.2g~italic(e)^{%.2g~`x`}"
+
+# Plot sensitivity vs. LAI with error bars and add a nonlinear regression curve (exponential decay)
+ggplot(statis_plot, aes(x = LAI, y = median, group = 1)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(x = LAI, y = median, ymin = Q25, ymax = Q75), 
+                width = 0, size = 1, position = position_dodge(0.8)) + 
+  geom_smooth(method = "lm", formula = y ~ exp(-x), color = "red", linetype = "dashed") +
+  labs(x = "LAI", y = "d(AET/P)/dLAI") +
+  stat_poly_eq(mapping = aes(x = LAI, y = median,
+                             label = sprintf(eq_fmt, after_stat(b_0), after_stat(b_1))),
+               label.x = 0.9, label.y = 0.9,
+               formula = y ~ exp(x), output.type = "numeric",
+               parse = TRUE, size = 6) +
+  stat_poly_eq(label.x = 0.9, label.y = 0.8, 
+               aes(x = LAI, y = median, label = paste(..rr.label..)), 
+               formula = y ~ exp(-x), parse = TRUE, size = 6) +
+  theme(axis.title = element_text(size = 14, face = "bold", color = "black"),
+        axis.text  = element_text(size = 14, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 14),
+        legend.position = "right",
+        legend.text = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black"))
+
+# ----------------------------
+# BINNING BY DI: Analysis of Sensitivity vs. DI (P/PET)
+# ----------------------------
+
+# Group data by DI bins and calculate median and quantiles for sensitivity; filter out the lowest bin
+statis_plot = multi_frame %>% 
+  na.omit() %>%
+  mutate(bin_DI = cut(DI, breaks = c(seq(0, 2, by = 0.2), Inf))) %>% 
+  group_by(bin_DI) %>% 
+  summarise(median = median(sensi, na.rm = TRUE),
+            Q25 = quantile(sensi, probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(sensi, probs = 0.75, na.rm = TRUE)) %>% 
+  filter(!bin_DI %in% c("(0,0.2]")) %>% 
+  na.omit() %>% 
+  transform(DI = seq(0.1, 1.9, by = 0.2))
+
+# Plot sensitivity vs. DI with error bars and add an exponential regression curve
+ggplot(statis_plot, aes(x = DI, y = median, group = 1)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(x = DI, y = median, ymin = Q25, ymax = Q75), 
+                width = 0, size = 1, position = position_dodge(0.8)) +
+  geom_smooth(method = "lm", formula = y ~ exp(-x), color = "red", linetype = "dashed") +
+  labs(x = "P/PET", y = "d(AET/P)/dLAI") +
+  stat_poly_eq(mapping = aes(x = DI, y = median,
+                             label = sprintf(eq_fmt, after_stat(b_0), after_stat(b_1))),
+               label.x = 0.9, label.y = 0.9,
+               formula = y ~ exp(x), output.type = "numeric",
+               parse = TRUE, size = 6) +
+  stat_poly_eq(label.x = 0.9, label.y = 0.8, 
+               aes(x = DI, y = median, label = paste(..rr.label..)), 
+               formula = y ~ exp(-x), parse = TRUE, size = 6) +
+  theme(axis.title = element_text(size = 14, face = "bold", color = "black"),
+        axis.text  = element_text(size = 14, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 14),
+        legend.position = "right",
+        legend.text = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black"))
+
+# ----------------------------
+# ANALYSIS OF SENSITIVITY VS. LAI TREND (WITH HORIZONTAL ERROR BARS)
+# ----------------------------
+
+# Group data by LAI trend bins and calculate median sensitivity and LAI trend quantiles; then filter out high LAI trend bin
+statis_plot = multi_frame %>% 
+  na.omit() %>%
+  mutate(bin_trendlai = cut(LAI_trend, breaks = c(seq(0, 0.04, by = 0.002), Inf))) %>% 
+  group_by(bin_trendlai) %>% 
+  summarise(median = median(sensi, na.rm = TRUE),
+            Q25 = quantile(sensi, probs = 0.25, na.rm = TRUE),
+            Q75 = quantile(sensi, probs = 0.75, na.rm = TRUE),
+            LAI_Q25 = quantile(LAI_trend, probs = 0.25, na.rm = TRUE) * 100,
+            LAI_Q75 = quantile(LAI_trend, probs = 0.75, na.rm = TRUE) * 100) %>% 
+  filter(!bin_trendlai %in% c("(0.04,Inf]")) %>% 
+  na.omit() %>% 
+  transform(DI = seq(0.1, 3.9, by = 0.2))
+
+# Plot sensitivity vs. DI along with horizontal error bars showing LAI trend quantiles and a regression curve
+ggplot(statis_plot, aes(x = DI, y = median, group = 1)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(x = DI, y = median, ymin = Q25, ymax = Q75),
+                width = 0, size = 1, position = position_dodge(0.8)) +
+  geom_errorbarh(aes(xmin = LAI_Q25, xmax = LAI_Q75), size = 1) +
+  geom_smooth(method = "lm", formula = y ~ exp(-x), color = "red", linetype = "dashed") +
+  labs(x = "LAI trend (m2/m2/100 yr)", y = "d(AET/P)/dLAI") +
+  stat_poly_eq(mapping = aes(x = DI, y = median,
+                             label = sprintf(eq_fmt, after_stat(b_0), after_stat(b_1))),
+               label.x = 0.9, label.y = 0.9,
+               formula = y ~ exp(x), output.type = "numeric",
+               parse = TRUE, size = 6) +
+  stat_poly_eq(label.x = 0.9, label.y = 0.8, 
+               aes(x = DI, y = median, label = paste(..rr.label..)),
+               formula = y ~ exp(-x), parse = TRUE, size = 6) +
+  theme(axis.title = element_text(size = 14, face = "bold", color = "black"),
+        axis.text  = element_text(size = 14, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 14),
+        legend.position = "right",
+        legend.text = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black"))
+
+# ----------------------------
+# HISTORICAL DATA ANALYSIS USING NETCDF (CMIP6)
+# ----------------------------
+
+# Load libraries for netCDF manipulation, raster processing, and plotting
+library(ncdf4)       # For netCDF file handling
+library(raster)      # For raster data manipulation
+library(ggplot2)     # For plotting
+library(lubridate)   # For date/time processing
+library(tidyverse)   # For data manipulation
+
+# Set working directory to folder containing historical CMIP6 data files (30-year ridge regression outputs for SSP585)
+setwd("H:\\Water_sink_source\\Water_sink_source_CMIP6\\Datasets\\30yr_ridgeregression_SSP585")
+
+# List all files with names starting with "all_ratio_1" and read them into a list of raster stacks
+filenames <- list.files(pattern = "all_ratio_1", full.names = TRUE)
+ldf <- lapply(filenames, stack)
+
+# Use terra package to read these files as a raster object
+stk1 <- terra::rast(filenames)
+
+# Convert the raster to a data frame with xy coordinates; remove NA values and round coordinates
+multi_frame_1 <-
+  as.data.frame(stk1, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3))
+
+# Rename the columns: first two columns are coordinates; remaining columns get appended with "_1"
+colnames(multi_frame_1) = c(names(multi_frame_1)[1:2],
+                            paste(names(multi_frame_1)[3:4], "_1", sep = ""))
+
+# Repeat for files starting with "all_ratio_2"
+filenames <- list.files(pattern = "all_ratio_2", full.names = TRUE)
+ldf <- lapply(filenames, stack)
+stk1 <- terra::rast(filenames)
+multi_frame_2 <-
+  as.data.frame(stk1, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3))
+colnames(multi_frame_2) = c(names(multi_frame_1)[1:2],
+                            paste(names(multi_frame_1)[3:4], "_2", sep = ""))
+
+# Repeat for files starting with "all_ratio_3"
+filenames <- list.files(pattern = "all_ratio_3", full.names = TRUE)
+ldf <- lapply(filenames, stack)
+stk1 <- terra::rast(filenames)
+multi_frame_3 <-
+  as.data.frame(stk1, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3))
+colnames(multi_frame_3) = c(names(multi_frame_1)[1:2],
+                            paste(names(multi_frame_1)[3:4], "_3", sep = ""))
+
+# Merge the three data frames (by common xy coordinates)
+muti_frame = merge(multi_frame_1, multi_frame_2)
+muti_frame = merge(muti_frame, multi_frame_3)
+
+# Define the standard error function (if not already defined)
+se <- function(x, na.rm = FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x) / length(x))
+}
+
+# Reshape the merged data frame (drop x and y columns) and compute summary statistics
+multi_long = muti_frame %>% 
+  dplyr::select(-x, -y) %>% 
+  reshape2::melt()
+
+statis_plot = multi_long %>% 
+  group_by(variable) %>%
+  summarise(median = median(value, na.rm = TRUE) * 100,
+            Q25 = quantile(value, probs = 0.25, na.rm = TRUE) * 100,
+            Q75 = quantile(value, probs = 0.75, na.rm = TRUE) * 100)
+
+# Combine additional statistics if needed (example using rbind)
+library(devtools)
+all1 = rbind(statis_plot, statis_plot_1)
+all2 = rbind(all1, statis_plot_2)
+
+# Define a function for formatting y-axis labels
+scaleFUN <- function(x) sprintf("%.2f", x)
+
+# Create a line plot with ribbons showing uncertainty (mean ± 2*se) along with regression equation and R²
+A2 = ggplot(all2, aes(x = ID, y = mean, color = UID, fill = UID)) + 
+  geom_ribbon(aes(ymin = mean - 2 * se, ymax = mean + 2 * se), alpha = 0.2, colour = NA) +
+  geom_line(size = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  stat_poly_eq(formula = y ~ x,
+               aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+               parse = TRUE, label.y.npc = "bottom", label.x.npc = "right", size = 6) +
+  scale_y_continuous(labels = scaleFUN) +
+  labs(x = "Year", y = "Slope(ET,LAI)") +
+  scale_color_manual(values = c("#ffa60f", "#ed5a65", "#2486b9")) +
+  scale_fill_manual(values = c("#ffa60f", "#ed5a65", "#2486b9")) +
+  theme(axis.title = element_text(size = 20, face = "bold", color = "black"),
+        axis.text  = element_text(size = 18, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text = element_text(size = 18),
+        legend.position = "none",
+        legend.text = element_text(size = 18),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks = element_line(colour = "black"))
+
+# End of script
