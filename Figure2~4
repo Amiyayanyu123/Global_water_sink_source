@@ -1,0 +1,656 @@
+# =============================================================================
+# Load required libraries for raster processing, time series handling, plotting,
+# and data manipulation.
+# =============================================================================
+library(raster)         # For handling raster data
+library(xts)            # For working with time series
+library(lubridate)      # For date/time processing
+library(ggstatsplot)    # For enhanced statistical plots with ggplot2
+library(rsq)            # For computing R-squared values for models
+library(extrafont)      # For using additional fonts in plots
+library(car)            # Companion to Applied Regression functions
+library(bfast)          # For detecting breakpoints in time series
+library(remotes)        # For installing packages from remote repositories
+library(ggpmisc)        # For adding equations/statistics to ggplots
+library(dplyr)          # For data manipulation
+library(lubridate)      # (Repeated; can remove duplicate)
+library(mice)           # For multiple imputation of missing values
+library(VIM)            # For visualizing and imputing missing values
+
+# =============================================================================
+# SECTION 1: Climate Zone and Sensitivity Data Processing
+# =============================================================================
+# Set working directory to the location of the climate zone data
+setwd("F:\\Global_water_sink_source\\K-P\\Beck_KG_V1")
+climate_zone <- raster("Beck_KG_V1_present_0p083.tif")  # Load climate zone raster
+
+# Set working directory to the location of the multiband sensitivity data
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+multiband_tif <- stack("coeff_model1_ridge.tif")  # Load multiband raster (coefficients)
+
+# Convert the multiband raster to a data frame with x-y coordinates.
+# Remove rows with NA values and round coordinates to 3 decimal places.
+multi_frame <-
+  as.data.frame(multiband_tif, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3))
+
+# Extract the climate zone values at each coordinate from the climate_zone raster.
+multi_frame$climate = extract(climate_zone, multi_frame[, 1:2])
+
+# Define a function to apply quintile breaks. Here, the breaks are set at:
+# 1, 3, 7, 16, 28 with corresponding labels "E", "A", "T", "S".
+ApplyQuintiles <- function(x) {
+  cut(x, breaks = c(1, 3, 7, 16, 28), 
+      labels = c("E", "A", "T", "S"), include.lowest = TRUE)
+}
+# Apply the quintile function to assign a climate Zone to each pixel.
+multi_frame$Zone <- sapply(multi_frame$climate, ApplyQuintiles)
+
+# Remove any remaining NA rows.
+multi_frame_1 <- na.omit(multi_frame)
+
+# Reshape the data frame from wide to long format; retain id variables.
+multi_long = multi_frame_1 %>% reshape2::melt(id = c("x", "y", "Zone", "climate"))
+
+# Compute summary statistics (mean, quartiles, etc.) for selected sensitivity variables,
+# grouped by climate Zone and variable.
+statis_plot = multi_long %>% 
+  dplyr::filter(variable %in% c("pr_EI", "gimms_ndvi_EI", "srad_EI", "vpd_EI", "tmean_EI")) %>%
+  group_by(Zone, variable) %>%
+  summarise(median = mean(value, na.rm = TRUE),
+            Q75    = quantile(value, probs = 0.75, na.rm = TRUE),
+            Q25    = quantile(value, probs = 0.25, na.rm = TRUE),
+            Q90    = quantile(value, probs = 0.9, na.rm = TRUE),
+            Q10    = quantile(value, probs = 0.1, na.rm = TRUE))
+
+# Plot the sensitivity (median) for each variable by climate Zone.
+ggplot(statis_plot, aes(x = variable, y = median, group = Zone, color = Zone)) + 
+  geom_errorbar(aes(ymin = Q25, ymax = Q75, color = Zone), width = 0.2, size = 1,
+                position = position_dodge(0.3)) +
+  scale_color_manual(values = c("#FF8989", "#FF9547", "#7CBB9C", "#4490C4")) +
+  geom_point(aes(color = Zone), position = position_dodge(0.3), size = 3) +
+  labs(x = "Climate Zone", y = "Sensitivity") +
+  scale_y_continuous(breaks = seq(-1, 0.4, 0.2)) +
+  theme(axis.title   = element_text(size = 20, face = "bold", color = "black"),
+        axis.text    = element_text(size = 18, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 18),
+        legend.position = "bottom",
+        legend.text  = element_text(size = 18),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# =============================================================================
+# SECTION 2: Attitude Analysis – Sensitivity along Longitude
+# =============================================================================
+# Load libraries (if not already loaded) for this separate section.
+library(raster)
+library(xts)
+library(lubridate)
+library(ggstatsplot)
+library(rsq)
+library(extrafont)
+library(car)
+library(bfast)
+library(remotes)
+library(ggpmisc)
+library(dplyr)
+library(lubridate)
+library(mice)
+library(VIM)
+
+# Set working directory to the data folder
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+multiband_tif <- stack("coeff_model1_ridge.tif")
+
+# Convert the raster to a data frame and round coordinates to 0 decimals.
+multi_frame <-
+  as.data.frame(multiband_tif, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 0))
+
+# Reshape the data from wide to long format.
+multi_long = multi_frame %>% reshape2::melt(id = c("x", "y"))
+
+# Compute summary statistics (median, Q25, Q75) for selected variables,
+# grouped by longitude (y) and variable.
+statis_plot = multi_long %>% 
+  dplyr::filter(variable %in% c("pr_EI", "gimms_ndvi_EI", "srad_EI", "vpd_EI", "tmean_EI")) %>%
+  group_by(y, variable) %>%
+  summarise(median = median(value, na.rm = TRUE),
+            Q75    = quantile(value, probs = 0.75, na.rm = TRUE),
+            Q25    = quantile(value, probs = 0.25, na.rm = TRUE) )
+
+# For each variable, create a plot of sensitivity along longitude. The following
+# example shows the plot for "pr_EI". Similar plots are produced for other variables.
+ggplot(statis_plot %>% dplyr::filter(variable %in% c("pr_EI")), aes(x = y, y = median)) + 
+  geom_ribbon(aes(ymin = Q25, ymax = Q75), alpha = 0.3) +
+  coord_flip() +
+  geom_line(size = 0.8) +
+  labs(x = "Longitude", y = "Sensitivity") +
+  scale_y_continuous(breaks = seq(-1, 1, 0.2)) +
+  theme(axis.title   = element_text(size = 20, face = "bold", color = "black"),
+        axis.text    = element_text(size = 18, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 18),
+        legend.position = "bottom",
+        legend.text  = element_text(size = 18),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# Similar ggplot commands are used to produce plots for "gimms_ndvi_EI", "srad_EI",
+# "vpd_EI", and "tmean_EI". Each plot uses a ribbon to show the interquartile range.
+
+# =============================================================================
+# SECTION 3: Sensitivity Difference Analysis between Two Periods
+# =============================================================================
+# This section compares sensitivity derived from two different rasters (e.g., for 1982 and 2000)
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+sensi_1982 <- raster("coeff_model1_kndvi_EI.tif")
+sensi_2000 <- raster("coeff_model2_kndvi_EI.tif")
+sensi_total <- stack("coeff_model1_ridge.tif")
+
+# Convert a selected layer (gimms_ndvi_EI) to a data frame.
+multi_frame <-
+  as.data.frame(sensi_total$gimms_ndvi_EI, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3))
+
+# Extract sensitivity values from the two rasters for comparison.
+multi_frame$snesi_1982 = extract(sensi_1982, multi_frame[, 1:2])
+multi_frame$snesi_2000 = extract(sensi_2000, multi_frame[, 1:2])
+
+# Remove any remaining NA values and round coordinates to 0.
+multi_frame = multi_frame %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 0))
+
+# Reshape the data for plotting.
+multi_long = multi_frame %>% reshape2::melt(id = c("x", "y"))
+
+# Compute the mean sensitivity for each longitude and variable.
+statis_plot = multi_long %>% 
+  group_by(y, variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE) )
+
+# Plot the sensitivity difference along longitude.
+ggplot(statis_plot, aes(x = y, y = mean, group = variable, color = variable)) + 
+  geom_line(size = 0.8) +
+  labs(x = "Longitude", y = "Sensitivity") +
+  scale_y_continuous(breaks = seq(-1, 1, 0.2)) +
+  theme(axis.title   = element_text(size = 20, face = "bold", color = "black"),
+        axis.text    = element_text(size = 18, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 18),
+        legend.position = "none",
+        legend.text  = element_text(size = 18),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# =============================================================================
+# SECTION 4: Trend Analysis (Sensitivity Trend over Time)
+# =============================================================================
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+all_trend <- stack("all_trend.tif")
+all_trend_p <- stack("all_trend_p.tif")
+
+# Rename layers in the p-value trend stack.
+names(all_trend_p) = c("EI_P", "NDVI_P", "VPD_P", "RS_P", "T_P", "Pre_P")
+
+# Convert the trend raster to a data frame with coordinates.
+multi_frame_origin <-
+  as.data.frame(all_trend, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3))
+
+# Extract p-values for EI and NDVI from the corresponding trend p-value stack.
+multi_frame_origin$EI_P = extract(all_trend_p$EI_P, multi_frame_origin[, 1:2])
+multi_frame_origin$NDVI_P = extract(all_trend_p$NDVI_P, multi_frame_origin[, 1:2])
+
+# For analysis without p-value filtering, round coordinates to 0.
+multi_frame = multi_frame_origin %>% 
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 0)) 
+
+# Reshape data for plotting.
+multi_long = multi_frame %>% reshape2::melt(id = c("x", "y"))
+
+# Compute mean trend for variable "year_gimms_ndvi" grouped by longitude.
+statis_plot = multi_long %>% 
+  dplyr::filter(variable %in% c("year_gimms_ndvi")) %>%
+  group_by(y, variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE) )
+
+# Now, filter the data where NDVI p-value < 0.05.
+multi_frame_1 = multi_frame_origin %>% 
+  dplyr::filter(NDVI_P < 0.05) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 0))
+
+# Reshape the filtered data.
+multi_long_1 = multi_frame_1 %>% reshape2::melt(id = c("x", "y"))
+
+# Compute the mean trend for the filtered data.
+statis_plot_p = multi_long_1 %>% 
+  dplyr::filter(variable %in% c("year_gimms_ndvi")) %>%
+  group_by(y, variable) %>%
+  summarise(mean = mean(value, na.rm = TRUE) )
+
+# Mark the p-filtered data with an ID and the non-filtered with another.
+statis_plot_p = transform(statis_plot_p, ID = "P")
+statis_plot = transform(statis_plot, ID = "NOP")
+statis_plot_all = rbind(statis_plot_p, statis_plot)
+
+# Plot the trend over longitude comparing filtered vs. non-filtered data.
+ggplot(statis_plot_all, aes(x = y, y = mean, group = ID, color = ID)) + 
+  geom_line(size = 0.6) + 
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") + 
+  scale_color_manual(values = c("#268785", "#66BAB7")) +
+  labs(x = "Longitude", y = "Sensitivity") +
+  scale_x_continuous(limits = c(-50, 70), breaks = seq(-50, 70, 30)) +
+  scale_y_continuous(limits = c(-5, 7.5), breaks = seq(-5, 5, 5)) +
+  theme(axis.title   = element_text(size = 20, face = "bold", color = "black"),
+        axis.text    = element_text(size = 18, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 18),
+        legend.position = "none",
+        legend.text  = element_text(size = 18),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# =============================================================================
+# SECTION 5: Trend Analysis Figure 3 (Regional Classification of Trend)
+# =============================================================================
+setwd("F:\\Global_water_sink_source\\Figures\\trend")
+all_trend <- stack("class.tif")  # Load a classification raster
+setwd("F:\\Global_water_sink_source\\Data\\scale_10000")
+all_trend_p <- stack("all_trend_p.tif")
+names(all_trend_p) = c("EI_P", "NDVI_P", "VPD_P", "RS_P", "T_P", "Pre_P")
+
+# Convert classification raster to data frame
+multi_frame_origin <-
+  as.data.frame(all_trend, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3))
+
+# Extract p-values for EI and NDVI from the trend p-value raster
+multi_frame_origin$EI_P = extract(all_trend_p$EI_P, multi_frame_origin[, 1:2])
+multi_frame_origin$NDVI_P = extract(all_trend_p$NDVI_P, multi_frame_origin[, 1:2])
+
+# Here we select specific regions based on class and p-value thresholds.
+statis_plot_p = multi_frame_origin %>%  
+  transform(ID = 1) %>% 
+  dplyr::filter(class > 0 & NDVI_P < 0.05 & EI_P < 0.05) %>%
+  mutate(across(c(x, y), round, digits = 0)) %>%
+  group_by(y, class) %>%
+  summarise(sum = sum(ID, na.rm = TRUE))
+
+statis_plot = multi_frame_origin %>%  
+  transform(ID = 1) %>% 
+  dplyr::filter(class > 0) %>%
+  mutate(across(c(x, y), round, digits = 0)) %>%
+  group_by(y, class) %>%
+  summarise(sum2 = sum(ID, na.rm = TRUE))
+
+# Merge the two summaries and calculate a ratio.
+all = merge(statis_plot_p, statis_plot)
+all$ratio = all$sum / all$sum2
+
+# Plot the summed values across longitude by class.
+ggplot(all, aes(x = y, y = sum, group = as.factor(class), color = as.factor(class))) + 
+  geom_line(size = 0.6) + 
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  scale_color_manual(values = c("#FD9B21", "#827799", "#FCCE94", "#5D3B99")) +
+  labs(x = "Longitude", y = "Sensitivity") +
+  xlim(-50, 70) +
+  theme(axis.title   = element_text(size = 20, face = "bold", color = "black"),
+        axis.text    = element_text(size = 18, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 18),
+        legend.position = "none",
+        legend.text  = element_text(size = 18),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# =============================================================================
+# SECTION 6: Ratio of Vegetation and Climate Effects by Land Cover
+# =============================================================================
+setwd("F:\\Global_water_sink_source\\Figures\\trend")
+class <- stack("class.tif")  # Load classification raster
+
+setwd("F:\\Global_water_sink_source\\Data\\ratio_scale_10000")
+all_trend <- stack("diff_vege_climate.tif")  # Load difference between vegetation and climate effects
+
+setwd("F:\\Global_water_sink_source\\ecological")
+lulc <- stack("LULC.tif")  # Load land cover data
+
+# Convert the classification raster to a data frame with coordinates.
+multi_frame <-
+  as.data.frame(class, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3))
+
+# Extract the vegetation-climate difference and land cover data.
+multi_frame$ratio = extract(all_trend, multi_frame[, 1:2])
+multi_frame$lulc  = extract(lulc, multi_frame[, 1:2])
+
+# Convert 'class' and 'lulc' to factors.
+multi_frame$class = as.factor(multi_frame$class)
+multi_frame$lulc  = as.factor(multi_frame$lulc)
+
+# Reshape the data if needed (here we keep the original data for summary statistics).
+multi_long = multi_frame %>% na.omit()
+
+# Re-define the standard error function.
+se <- function(x, na.rm = FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x) / length(x))
+}
+
+# Compute summary statistics grouped by class and land cover.
+statis_plot = multi_frame %>% 
+  na.omit() %>%
+  group_by(class, lulc) %>%
+  summarise(median = median(ratio, na.rm = TRUE),
+            Q75    = quantile(ratio, probs = 0.75, na.rm = TRUE),
+            Q25    = quantile(ratio, probs = 0.25, na.rm = TRUE) )
+
+# Plot the median ratio with a ribbon (interquartile range) over longitude.
+ggplot(statis_plot, aes(x = y, y = median)) + 
+  geom_ribbon(aes(ymin = Q25, ymax = Q75), alpha = 0.3) +
+  coord_flip() +
+  geom_line(size = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  labs(x = "Longitude", y = "Sensitivity") +
+  scale_y_continuous(breaks = seq(-1, 1, 0.2)) +
+  theme(axis.title   = element_text(size = 20, face = "bold", color = "black"),
+        axis.text    = element_text(size = 18, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 18),
+        legend.position = "bottom",
+        legend.text  = element_text(size = 18),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# =============================================================================
+# SECTION 7: Bar Plot of Regional Danger (Percentage of Total)
+# =============================================================================
+setwd("F:\\Global_water_sink_source\\Data\\regions_danger")
+bar_plot <- read.table("Figure1.csv", header = TRUE, na.strings = "NA", sep = ",") %>% 
+  dplyr::filter(Type %in% c("Land", "Land-Ocean")) %>% 
+  dplyr::select(Acronym, PP, PN, NN, NP) %>%
+  reshape2::melt() %>% 
+  na.omit()
+
+# Reorder the data so that "PP" values are shown first.
+bar_plot = bar_plot %>% 
+  dplyr::filter(variable %in% "PP") %>%
+  arrange(desc(value)) %>%
+  bind_rows(bar_plot %>% filter(variable != 'PP')) %>%
+  mutate(Acronym = factor(Acronym, unique(Acronym)), 
+         value = value * 100, 
+         label = paste0(value, '%'))
+
+# Create a horizontal stacked bar plot showing the percentage of total for each subregion.
+ggplot(bar_plot, aes(fill = variable, y = value, x = Acronym, label = label)) + 
+  geom_bar(position = "stack", stat = "identity") + 
+  labs(x = "Subregions", y = "Percentage of total") +
+  coord_flip() +
+  scale_fill_manual(values = c("#FD9B21", "#827799", "#FCCE94", "#5D3B99")) +
+  theme(axis.title   = element_text(size = 14, face = "bold", color = "black"),
+        axis.text    = element_text(size = 12, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 12),
+        legend.position = "bottom",
+        legend.text  = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# =============================================================================
+# SECTION 8: Regional Danger – Additional Analysis Using UID and Ratio Data
+# =============================================================================
+setwd("F:\\Global_water_sink_source\\Data\\regions_danger")
+ID <- read.table("UID.csv", header = TRUE, na.strings = "NA", sep = ",")
+
+# Merge the UID data with the regional summary statistics (statis_plot)
+all = merge(ID, statis_plot)
+# For one version, filter for a specific class ("1")
+all = merge(all, bar_plot %>% dplyr::filter(variable %in% "PP"))
+
+# Compute climate and vegetation contributions based on the ratio.
+all$climate = all$mean * all$value
+all$vege = (1 - all$mean) * all$value 
+
+# Reshape the data for plotting.
+all_plot = all %>% 
+  arrange(desc(value)) %>% 
+  dplyr::select(Acronym, climate, vege, label) %>% 
+  reshape2::melt(variable.name = "Acronym")
+colnames(all_plot) = c("Acronym", "label", "variable", "value")
+
+# Create a basic bar plot.
+ggplot(data = all_plot, aes(x = Acronym, y = value, fill = variable)) +
+  geom_bar(stat = "identity")
+
+# Create a horizontal stacked bar plot with labels.
+ggplot(all_plot, aes(fill = variable, y = value, x = Acronym, label = label)) + 
+  geom_bar(position = "stack", stat = "identity") + 
+  labs(x = "Subregions", y = "Percentage of total") +
+  coord_flip() +
+  scale_fill_manual(values = c("#FD9B21", "#827799", "#FCCE94", "#5D3B99")) +
+  theme(axis.title   = element_text(size = 14, face = "bold", color = "black"),
+        axis.text    = element_text(size = 12, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 12),
+        legend.position = "bottom",
+        legend.text  = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# Another version using UID data:
+setwd("F:\\Global_water_sink_source\\Data\\regions_danger")
+ID <- read.table("UID.csv", header = TRUE, na.strings = "NA", sep = ",")
+all = merge(ID, statis_plot)
+all_plot = all %>% dplyr::select(Acronym, mean) %>% reshape2::melt()
+all_plot = all_plot %>% 
+  dplyr::filter(variable %in% "vege") %>%
+  arrange(desc(value)) %>%
+  bind_rows(all_plot %>% filter(variable != 'vege')) %>%
+  mutate(Acronym = factor(Acronym, unique(Acronym)), 
+         value = value * 100, 
+         label = paste0(value, '%'))
+
+ggplot(all_plot, aes(fill = variable, y = value, x = Acronym, label = label)) + 
+  geom_bar(position = "stack", stat = "identity") + 
+  labs(x = "Subregions", y = "Percentage of total") +
+  coord_flip() +
+  theme(axis.title   = element_text(size = 14, face = "bold", color = "black"),
+        axis.text    = element_text(size = 12, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 12),
+        legend.position = "bottom",
+        legend.text  = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# Yet another plot comparing regional trends:
+setwd("F:\\Global_water_sink_source\\Data\\regions_danger")
+ID <- read.table("UID.csv", header = TRUE, na.strings = "NA", sep = ",")
+all = merge(ID, statis_plot)
+all_plot = all %>% 
+  arrange(desc(median)) %>%
+  mutate(Acronym = factor(Acronym, unique(Acronym)), 
+         median = median, 
+         label = paste0(median, '%'))
+
+ggplot(all_plot, aes(x = Acronym, y = median, label = label)) + 
+  geom_errorbar(aes(ymin = Q25, ymax = Q75)) +
+  geom_point(position = position_dodge(0.3), size = 1) +
+  coord_flip() +
+  geom_line(size = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(x = "Subregions", y = "Trend KNDVI") +
+  scale_y_continuous(limits = c(-2.5, 2.5), breaks = seq(-2.5, 2.5, 0.5)) +
+  theme(axis.title   = element_text(size = 13, face = "bold", color = "black"),
+        axis.text    = element_text(size = 13, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 13),
+        legend.position = "bottom",
+        legend.text  = element_text(size = 13),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# =============================================================================
+# SECTION 9: Ratio of Vegetation and Climate Effects by IPCC Regions
+# =============================================================================
+setwd("F:\\Global_water_sink_source\\Figures\\trend")
+class <- stack("class.tif")  # Load classification raster
+
+setwd("F:\\Global_water_sink_source\\Data\\ratio_scale_10000")
+all_trend <- stack("trend_ndvi_EI.tif")  # Load trend data for NDVI
+
+setwd("F:\\Global_water_sink_source\\shp")
+zone <- stack("IPCCWGIreferenceregionsv4_Po31.tif")  # Load IPCC region boundaries as raster
+
+# Convert classification raster to data frame and round coordinates.
+multi_frame <-
+  as.data.frame(class, xy = TRUE) %>%
+  na.omit() %>% 
+  mutate(across(c(x, y), round, digits = 3))
+
+# Extract NDVI trend and zone information at each coordinate.
+multi_frame$ratio = extract(all_trend, multi_frame[, 1:2])
+multi_frame$zone  = extract(zone, multi_frame[, 1:2]) 
+
+# Convert 'class' and 'zone' to factors.
+multi_frame$class = as.factor(multi_frame$class)
+multi_frame$zone  = as.factor(multi_frame$zone)
+
+# Remove NAs.
+multi_long = multi_frame %>% na.omit() 
+
+# Define standard error function (if needed).
+se <- function(x, na.rm = FALSE) {
+  if (na.rm) x <- na.omit(x)
+  sqrt(var(x) / length(x))
+}
+
+# Compute summary statistics (median and quartiles) grouped by zone.
+statis_plot = multi_long %>% 
+  group_by(zone) %>%
+  summarise(median = median(ratio, na.rm = TRUE),
+            Q75    = quantile(ratio, probs = 0.75, na.rm = TRUE),
+            Q25    = quantile(ratio, probs = 0.25, na.rm = TRUE) )
+
+# =============================================================================
+# SECTION 10: Merging Region Data with UID and Plotting Regional Ratios
+# =============================================================================
+setwd("F:\\Global_water_sink_source\\Data\\regions_danger")
+ID <- read.table("UID.csv", header = TRUE, na.strings = "NA", sep = ",") 
+ID$zone = as.factor(ID$zone)
+all = merge(ID, statis_plot) %>% dplyr::filter(class %in% "1")
+all = merge(all, bar_plot %>% dplyr::filter(variable %in% "PP"))
+
+# Calculate climate and vegetation contributions.
+all$climate = all$mean * all$value
+all$vege = (1 - all$mean) * all$value 
+
+# Prepare the data for plotting.
+all_plot = all %>% 
+  arrange(desc(value)) %>% 
+  dplyr::select(Acronym, climate, vege, label) %>% 
+  reshape2::melt(variable.name = "Acronym")
+colnames(all_plot) = c("Acronym", "label", "variable", "value")
+
+# Plot a basic bar plot.
+ggplot(data = all_plot, aes(x = Acronym, y = value, fill = variable)) +
+  geom_bar(stat = "identity")
+
+# Create a horizontal stacked bar plot with labels.
+ggplot(all_plot, aes(fill = variable, y = value, x = Acronym, label = label)) + 
+  geom_bar(position = "stack", stat = "identity") + 
+  labs(x = "Subregions", y = "Percentage of total") +
+  coord_flip() +
+  scale_fill_manual(values = c("#FD9B21", "#827799", "#FCCE94", "#5D3B99")) +
+  theme(axis.title   = element_text(size = 14, face = "bold", color = "black"),
+        axis.text    = element_text(size = 12, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 12),
+        legend.position = "bottom",
+        legend.text  = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# Another version of the regional ratio plot:
+setwd("F:\\Global_water_sink_source\\Data\\regions_danger")
+ID <- read.table("UID.csv", header = TRUE, na.strings = "NA", sep = ",") 
+all = merge(ID, statis_plot)
+all_plot = all %>% dplyr::select(Acronym, mean) %>% reshape2::melt()
+all_plot = all_plot %>% 
+  dplyr::filter(variable %in% "vege") %>%
+  arrange(desc(value)) %>%
+  bind_rows(all_plot %>% filter(variable != 'vege')) %>%
+  mutate(Acronym = factor(Acronym, unique(Acronym)), 
+         value = value * 100, 
+         label = paste0(value, '%'))
+
+ggplot(all_plot, aes(fill = variable, y = value, x = Acronym, label = label)) + 
+  geom_bar(position = "stack", stat = "identity") + 
+  labs(x = "Subregions", y = "Percentage of total") +
+  coord_flip() +
+  theme(axis.title   = element_text(size = 14, face = "bold", color = "black"),
+        axis.text    = element_text(size = 12, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 12),
+        legend.position = "bottom",
+        legend.text  = element_text(size = 14),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# =============================================================================
+# SECTION 11: Final Regional Trend Plot for KNDVI
+# =============================================================================
+setwd("F:\\Global_water_sink_source\\Data\\regions_danger")
+ID <- read.table("UID.csv", header = TRUE, na.strings = "NA", sep = ",") 
+all = merge(ID, statis_plot) 
+
+all_plot = all %>%  
+  arrange(desc(median)) %>%
+  mutate(Acronym = factor(Acronym, unique(Acronym)), 
+         median = median, 
+         label = paste0(median, '%'))
+
+ggplot(all_plot, aes(x = Acronym, y = median, label = label)) + 
+  geom_errorbar(aes(ymin = Q25, ymax = Q75)) +
+  geom_point(position = position_dodge(0.3), size = 1) +
+  coord_flip() +
+  geom_line(size = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(x = "Subregions", y = "Trend KNDVI") +
+  scale_y_continuous(limits = c(-2.5, 2.5), breaks = seq(-2.5, 2.5, 0.5)) +
+  theme(axis.title   = element_text(size = 13, face = "bold", color = "black"),
+        axis.text    = element_text(size = 13, face = "plain", color = "black"),
+        panel.background = element_rect(colour = "black", fill = NA),
+        panel.grid.minor = element_blank(),
+        text         = element_text(size = 13),
+        legend.position = "bottom",
+        legend.text  = element_text(size = 13),
+        legend.background = element_rect(colour = NA, fill = NA),
+        axis.ticks   = element_line(colour = "black"))
+
+# =============================================================================
+# End of Script
+# =============================================================================
